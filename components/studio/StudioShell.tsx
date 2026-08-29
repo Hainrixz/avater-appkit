@@ -338,7 +338,10 @@ export function StudioShell() {
             ver lo que vas a desbloquear vale más que un texto de onboarding. */}
         <div
           className={locked ? "pointer-events-none select-none opacity-35" : undefined}
-          {...(locked ? { inert: "" as unknown as boolean } : {})}
+          /* React 19 tipa `inert` como boolean de verdad. Pasarle "" era un truco de
+             React 18 y ahora se interpreta como false, o sea que el estudio quedaba
+             accesible por teclado detrás de la puerta de la llave. */
+          inert={locked}
         >
           {/* El raíl es pegajoso PERO con scroll propio: en una pantalla de portátil el
               panel es más alto que el viewport, y sin esto el botón Generate queda

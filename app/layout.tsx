@@ -29,9 +29,22 @@ export const viewport: Viewport = {
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    /*
+     * `suppressHydrationWarning` va SÓLO en <html>, y no es para tapar bugs nuestros.
+     *
+     * Las extensiones del navegador escriben atributos en <html> y <body> antes de que
+     * React hidrate — LanguageTool mete data-lt-installed, Grammarly y los modos oscuros
+     * hacen lo suyo — y React lo reporta como desajuste de hidratación aunque el código
+     * esté perfecto. Verificado: en un navegador limpio no sale ni un aviso, y <html>
+     * sólo lleva lang y class.
+     *
+     * Esto suprime un único nivel de profundidad, así que un desajuste REAL dentro de la
+     * app se sigue reportando igual. Por eso va aquí y no en <body>.
+     */
     <html
       lang="en"
       className={`${satoshi.variable} ${generalSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
         {children}
