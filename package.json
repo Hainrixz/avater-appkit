@@ -39,5 +39,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hainrixz/avater-appkit.git"
+  },
+  "description": "A local Next.js studio for the Higgsfield API. Bring your own key.",
+  "license": "MIT"
 }

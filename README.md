@@ -39,6 +39,7 @@ This is a starter kit, so the interesting bits are the ones that took measuremen
 
 - **Teleport uses `popcorn/auto`, not `soul/reference`.** This one cost real money to learn. `soul/reference` reproduces the *reference photo's whole composition* — background included — while transferring identity, so a studio portrait plus "Tokyo at night" returns a studio portrait. It is not a prompt problem: two rewrites, with and without `enhance_prompt`, failed identically. `popcorn/auto` composes the subject into a genuinely new scene, and it's what the demo images in `public/demo/` were made with. `soul/reference` stays in the model switcher labelled *(restyle)*, which is what it's actually good at.
 - **It probes what your key can actually run.** Model access is per-account: on the key this was built against, 11 of 15 catalogued models worked and the rest returned `model_not_found`, `model_blocked` or `model_disabled`. So the app asks `/estimate` for each model at startup — that endpoint is free — and shows real prices next to real availability. Models you can't run stay visible, greyed out, with the reason.
+- **It tells you what it changed.** Pick a 5-second clip, switch from Kling to Hailuo — which only does 6 and 10 — and the app snaps to 6 *and says so*: "Hailuo 2.3 doesn't do 5s clip length — using 6s." It also tells you that video takes its aspect ratio from the source still, because none of the verified video models accept an `aspect_ratio` field at all. Silent coercion is a bug from the user's seat.
 - **The model switcher genuinely switches.** The API's request bodies are not uniform: `duration` is an integer `5|10` on Kling, `6|10` on Hailuo, and a *string* `"4"|"6"|"8"` on Veo; some models take `aspect_ratio` and `resolution`, others have no such field. Each catalogue entry owns a `buildBody()` that snaps unsupported values to the nearest legal one and drops fields the model doesn't have — and the UI tells you what it changed ("Hailuo doesn't do 5s clips — using 6s") instead of coercing silently. `npm run check:models` is the contract test for that.
 - **Every generation shows its price first.** There is no balance endpoint, so an out-of-credits error is only discoverable at submit time. The free `/estimate` call is the only thing standing between you and a surprise.
 - **Failures are honest.** `nsfw` is a distinct terminal state that Higgsfield refunds automatically, so it renders in neutral grey and leads with "you weren't charged" — not a red error. Running out of concurrent slots arrives as a `400` (there is no `429` in this API), so it's detected by message and shown as "queued", not "invalid request".
@@ -77,6 +78,7 @@ npm run typecheck     # tsc --noEmit
 npm run lint          # eslint
 npm run check:models  # the buildBody contract test — no network, no credits
 npm run banner        # re-shoot .github/banner.jpg from the running app
+                      # (needs `npx playwright install chromium` once)
 ```
 
 ## Making it yours

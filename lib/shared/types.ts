@@ -145,6 +145,9 @@ export interface ModelSpec {
   image: ModelImageInput;
   supports: ModelSupports;
   defaults: Partial<GenerationInput>;
+  /** Advertencia honesta que el selector muestra en la fila. Para cuando el nombre
+   *  del modelo promete algo distinto de lo que hace de verdad. */
+  note?: string;
   recipes: readonly RecipeId[];
   buildBody(input: GenerationInput): Record<string, unknown>;
 }

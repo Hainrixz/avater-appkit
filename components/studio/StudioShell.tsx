@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, LogOut, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -8,21 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppError } from "@/lib/shared/errors";
 import type { GenerationInput, PublicModelSpec, RecipeId } from "@/lib/shared/types";
-import { RECIPE_LIST, getRecipe } from "@/lib/recipes";
+import { RECIPE_LIST, getRecipe, type Recipe } from "@/lib/recipes";
 import { formatCredits, formatUsd } from "@/lib/format";
 import * as api from "@/lib/client/api";
 import {
-  hashInput,
   isTerminalPhase,
   jobList,
-  patchJob,
   rehydrate,
-  upsertJob,
   useAppState,
   setState,
   type ClientJob,
 } from "@/lib/client/store";
 import { attachVisibilityResume, ensureRunning } from "@/lib/client/job-runner";
+import { recheckJob, retryJob, submitStill, submitVideo } from "@/lib/client/actions";
+import { describeChange, diffCapabilities, snapEnum } from "@/lib/provider/higgsfield/normalize";
 import { ApiKeyGate } from "./ApiKeyGate";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { SlotDropzone } from "@/components/upload/SlotDropzone";
@@ -32,6 +31,36 @@ import { ResultsGrid } from "@/components/results/ResultsGrid";
 const stillOf = (m: PublicModelSpec) =>
   m.capability !== "image->video" && m.capability !== "text->video";
 
+/** El precio depende del modelo y los ajustes, no del contenido de la foto, así que
+ *  presupuestar antes de subir nada es correcto y además instantáneo. */
+const PRICE_PROBE_URL = "https://cdn.example.com/probe.jpg";
+
+/**
+ * Construir la entrada es una función PURA fuera del componente, no un useCallback.
+ *
+ * Next 16 trae el React Compiler, que memoiza solo; una memoización manual que no
+ * puede preservar es un error de lint, no una optimización. Sacando esto del cuerpo
+ * del componente desaparece el problema y además el efecto de presupuesto puede
+ * depender sólo de primitivos, que es lo que de verdad evita que se re-dispare.
+ */
+function makeStillInput(args: {
+  modelId: string;
+  recipe: Recipe;
+  userPrompt: string;
+  count: number;
+  resolution?: string;
+  imageUrls: string[];
+}): GenerationInput {
+  return {
+    modelId: args.modelId,
+    prompt: args.recipe.buildPrompt(args.userPrompt),
+    imageUrls: args.imageUrls,
+    aspectRatio: args.recipe.aspectRatio,
+    batchSize: args.count,
+    resolution: args.resolution,
+  };
+}
+
 export function StudioShell() {
   const state = useAppState((s) => s);
   const [slots, setSlots] = useState<Record<string, SlotValue | null>>({});
@@ -40,6 +69,10 @@ export function StudioShell() {
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState<{ credits: number; usd: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /* La duración PREFERIDA del usuario, no la efectiva. Se conserva al cambiar de
+     modelo para que el ajuste sea visible: si pide 5s y pasa a Hailuo, que sólo hace
+     6 y 10, la app usa 6 y lo dice, en vez de fingir que el usuario pidió 6. */
+  const [preferredDuration, setPreferredDuration] = useState(5);
   const estimateAbort = useRef<AbortController | null>(null);
 
   const recipe = getRecipe(state.recipe);
@@ -47,7 +80,7 @@ export function StudioShell() {
 
   /* ---------------- arranque ---------------- */
 
-  const probe = useCallback(async (force: boolean) => {
+  async function probe(force: boolean) {
     setState({ probing: true });
     try {
       // "all" y no "curated": con sólo los curados, los modelos extendidos salían
@@ -63,7 +96,7 @@ export function StudioShell() {
     } finally {
       setState({ probing: false });
     }
-  }, []);
+  }
 
   useEffect(() => {
     rehydrate();
@@ -93,23 +126,35 @@ export function StudioShell() {
       alive = false;
       detach();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------------- selección de modelo ---------------- */
 
-  const stillModels = useMemo(
-    () => state.models.filter((m) => stillOf(m) && m.recipes.includes(state.recipe)),
-    [state.models, state.recipe],
+  const stillModels = state.models.filter(
+    (m) => stillOf(m) && m.recipes.includes(state.recipe),
   );
-  const videoModels = useMemo(
-    () => state.models.filter((m) => !stillOf(m) && m.recipes.includes(state.recipe)),
-    [state.models, state.recipe],
+  const videoModels = state.models.filter(
+    (m) => !stillOf(m) && m.recipes.includes(state.recipe),
   );
 
   const stillModelId = state.stillModelByRecipe[state.recipe] ?? recipe.stillModelId;
   const videoModelId = state.videoModelByRecipe[state.recipe] ?? recipe.videoModelId;
   const stillModel = state.models.find((m) => m.id === stillModelId);
+  const videoModel = state.models.find((m) => m.id === videoModelId);
+
+  const videoDurations = videoModel?.supports.durationsSec ?? [];
+  const effectiveDuration = videoDurations.length
+    ? snapEnum(preferredDuration, videoDurations, videoDurations[0]!)
+    : preferredDuration;
+  /* Se compara contra la preferencia del usuario Y contra la relación de aspecto
+     de la receta: ningún modelo de vídeo verificado acepta aspect_ratio, así que
+     esa línea sale siempre y explica de dónde la hereda. */
+  const videoWarnings = videoModel
+    ? diffCapabilities(videoModel, {
+        durationSec: preferredDuration,
+        aspectRatio: recipe.aspectRatio,
+      })
+    : [];
 
   /* ---------------- entrada actual ---------------- */
 
@@ -119,17 +164,9 @@ export function StudioShell() {
     filled.length === recipe.slots.length &&
     (!recipe.promptRequired || prompt.trim().length > 0);
 
-  const buildInput = useCallback(
-    (imageUrls: string[]): GenerationInput => ({
-      modelId: stillModelId,
-      prompt: recipe.buildPrompt(prompt),
-      imageUrls,
-      aspectRatio: recipe.aspectRatio,
-      batchSize: count,
-      resolution: stillModel?.defaults.resolution,
-    }),
-    [stillModelId, recipe, prompt, count, stillModel],
-  );
+  const stillResolution = stillModel?.defaults.resolution;
+  const keyConnected = state.key.connected;
+  const recipeId = state.recipe;
 
   /**
    * El presupuesto se pide SIEMPRE antes de enviar.
@@ -140,7 +177,7 @@ export function StudioShell() {
    * y los ajustes, no del contenido de la foto.
    */
   useEffect(() => {
-    if (!state.key.connected || !stillModelId) return;
+    if (!keyConnected || !stillModelId) return;
     estimateAbort.current?.abort();
     const ctrl = new AbortController();
     estimateAbort.current = ctrl;
@@ -148,8 +185,18 @@ export function StudioShell() {
     const id = setTimeout(async () => {
       setEstimating(true);
       try {
-        const placeholder = recipe.slots.map(() => "https://cdn.example.com/probe.jpg");
-        const est = await api.estimate(buildInput(placeholder), ctrl.signal);
+        const r = getRecipe(recipeId);
+        const est = await api.estimate(
+          makeStillInput({
+            modelId: stillModelId,
+            recipe: r,
+            userPrompt: prompt,
+            count,
+            resolution: stillResolution,
+            imageUrls: r.slots.map(() => PRICE_PROBE_URL),
+          }),
+          ctrl.signal,
+        );
         setEstimate({ credits: est.credits, usd: est.usd });
       } catch {
         setEstimate(null);
@@ -162,177 +209,67 @@ export function StudioShell() {
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [state.key.connected, stillModelId, count, recipe, buildInput]);
+  }, [keyConnected, stillModelId, count, recipeId, prompt, stillResolution]);
 
   /* ---------------- generar ---------------- */
 
-  const generate = useCallback(async () => {
+  async function generate() {
     if (!ready || submitting) return;
-
     const localId = crypto.randomUUID();
-    const sourcePreview = filled[0]?.previewUrl;
-
-    const draft: ClientJob = {
-      localId,
-      modelId: stillModelId,
-      modelLabel: stillModel?.label ?? stillModelId,
-      recipe: state.recipe,
-      stage: "still",
-      input: buildInput([]),
-      inputHash: "",
-      previews: filled.map((f) => f.previewUrl),
-      sourcePreview,
-      phase: "uploading",
-      images: [],
-      warnings: [],
-      createdAt: Date.now(),
-      pollAttempts: 0,
-      nextPollAt: Number.MAX_SAFE_INTEGER,
-      expectedCount: count,
-      etaSeconds: stillModel?.medianSeconds ?? 10,
-      estimate: estimate
-        ? { credits: estimate.credits, usd: estimate.usd, raw: { credits: "", usd: "" } }
-        : undefined,
-    };
-
     setSubmitting(true);
-    upsertJob(draft);
-
     try {
-      const uploaded = await Promise.all(
-        recipe.slots.map(async (s) => {
-          const v = slots[s.id];
-          if (!v) throw new AppError("invalid_params", `Missing ${s.label}.`);
-          if (v.remoteUrl) return v.remoteUrl;
-          const asset = await api.uploadImage(v.file);
+      await submitStill({
+        localId,
+        recipe,
+        model: stillModel,
+        modelId: stillModelId,
+        userPrompt: prompt,
+        count,
+        slotFiles: recipe.slots.map((sl) => slots[sl.id]!),
+        estimate: estimate ?? undefined,
+        onUploaded: (i, url) => {
+          const slotId = recipe.slots[i]!.id;
           setSlots((prev) => ({
             ...prev,
-            [s.id]: prev[s.id] ? { ...prev[s.id]!, remoteUrl: asset.url } : prev[s.id]!,
+            [slotId]: prev[slotId] ? { ...prev[slotId]!, remoteUrl: url } : prev[slotId]!,
           }));
-          return asset.url;
-        }),
-      );
-
-      const input = buildInput(uploaded);
-      patchJob(localId, { phase: "submitting", input, inputHash: hashInput(input) });
-
-      // La clave de idempotencia es NUESTRA, generada antes de enviar: dos clics
-      // seguidos comparten la misma promesa y producen un solo POST upstream.
-      const job = await api.submit(input, localId);
-
-      patchJob(localId, {
-        phase: job.status === "queued" ? "queued" : "in_progress",
-        requestId: job.id,
-        statusUrl: job.statusUrl,
-        cancelUrl: job.cancelUrl,
-        correlationId: job.correlationId,
-        submittedAt: Date.now(),
-        nextPollAt: Date.now() + 2000,
+        },
       });
-      ensureRunning();
     } catch (e) {
-      const err = e instanceof AppError ? e : new AppError("server_error", "Failed.");
-      // Un fallo de red DESPUÉS de enviar es ambiguo: no se reintenta nunca solo.
-      patchJob(localId, {
-        phase: err.kind === "network" ? "unknown_submit" : "failed",
-        error: err.toPayload(),
-      });
-      toast.error(err.message);
+      toast.error(e instanceof AppError ? e.message : "Generation failed.");
     } finally {
       setSubmitting(false);
     }
-  }, [
-    ready,
-    submitting,
-    filled,
-    stillModelId,
-    stillModel,
-    state.recipe,
-    buildInput,
-    count,
-    estimate,
-    recipe.slots,
-    slots,
-  ]);
+  }
 
   /* ---------------- etapa 2: animar ---------------- */
 
-  const animate = useCallback(
-    async (parent: ClientJob, imageUrl: string) => {
-      const model = state.models.find((m) => m.id === videoModelId);
-      const localId = crypto.randomUUID();
-
-      const input: GenerationInput = {
-        modelId: videoModelId,
-        prompt: recipe.buildVideoPrompt(prompt),
-        imageUrls: [imageUrl],
-        durationSec: model?.defaults.durationSec,
-        resolution: model?.defaults.resolution,
-      };
-
-      upsertJob({
-        localId,
-        modelId: videoModelId,
-        modelLabel: model?.label ?? videoModelId,
-        recipe: state.recipe,
-        stage: "video",
+  async function animate(parent: ClientJob, imageUrl: string) {
+    try {
+      await submitVideo({
+        localId: crypto.randomUUID(),
         parentLocalId: parent.localId,
-        input,
-        inputHash: hashInput(input),
-        previews: [],
-        sourcePreview: imageUrl,
-        phase: "submitting",
-        images: [],
-        warnings: [],
-        createdAt: Date.now(),
-        pollAttempts: 0,
-        nextPollAt: Number.MAX_SAFE_INTEGER,
-        expectedCount: 1,
-        etaSeconds: model?.medianSeconds ?? 90,
+        recipe,
+        model: videoModel,
+        modelId: videoModelId,
+        userPrompt: prompt,
+        imageUrl,
+        durationSec: effectiveDuration,
+        warnings: videoWarnings,
       });
+    } catch (e) {
+      toast.error(e instanceof AppError ? e.message : "Generation failed.");
+    }
+  }
 
-      try {
-        // Se vuelve a pedir presupuesto: el vídeo es otro escalón de precio y
-        // reutilizar el de la foto sería mentirle al usuario.
-        const est = await api.estimate(input);
-        patchJob(localId, { estimate: est });
-
-        const job = await api.submit(input, localId);
-        patchJob(localId, {
-          phase: job.status === "queued" ? "queued" : "in_progress",
-          requestId: job.id,
-          statusUrl: job.statusUrl,
-          cancelUrl: job.cancelUrl,
-          submittedAt: Date.now(),
-          nextPollAt: Date.now() + 2000,
-        });
-        ensureRunning();
-      } catch (e) {
-        const err = e instanceof AppError ? e : new AppError("server_error", "Failed.");
-        patchJob(localId, {
-          phase: err.kind === "network" ? "unknown_submit" : "failed",
-          error: err.toPayload(),
-        });
-        toast.error(err.message);
-      }
-    },
-    [state.models, videoModelId, recipe, prompt, state.recipe],
-  );
-
-  const retry = useCallback((job: ClientJob) => {
-    patchJob(job.localId, {
-      phase: "draft",
-      error: undefined,
-      images: [],
-      pollAttempts: 0,
-    });
+  function retry(job: ClientJob) {
+    retryJob(job.localId);
     toast("Inputs kept — adjust and hit Generate.");
-  }, []);
+  }
 
-  const checkAgain = useCallback((job: ClientJob) => {
-    patchJob(job.localId, { phase: "in_progress", nextPollAt: Date.now(), pollAttempts: 0 });
-    ensureRunning();
-  }, []);
+  function checkAgain(job: ClientJob) {
+    recheckJob(job.localId);
+  }
 
   async function disconnect() {
     await api.disconnectKey();
@@ -481,7 +418,7 @@ export function StudioShell() {
             {/* El segundo selector es el que de verdad importa: la etapa de imagen
                 suele tener un solo motor sensato, mientras que animar tiene una
                 docena. Cambiar aquí de Kling a Hailuo o a Wan no toca nada más del
-                flujo — el normalizador traduce el body y avisa de lo que ajustó. */}
+                flujo — el normalizador traduce el body y la app dice qué ajustó. */}
             {recipe.canAnimate && videoModels.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="text-meta font-medium text-ink-muted">
@@ -499,6 +436,38 @@ export function StudioShell() {
                     }))
                   }
                 />
+
+                {videoDurations.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-meta text-ink-muted">Clip</span>
+                    <div className="flex gap-1">
+                      {videoDurations.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setPreferredDuration(d)}
+                          aria-pressed={effectiveDuration === d}
+                          className={
+                            effectiveDuration === d
+                              ? "rounded-md bg-panel-raised px-2.5 py-1 text-meta font-semibold text-ink"
+                              : "rounded-md px-2.5 py-1 text-meta text-ink-muted hover:text-ink"
+                          }
+                        >
+                          {d}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* La confesión. Coercionar en silencio es un bug desde el asiento
+                    del usuario: si pidió 5s tiene derecho a saber que salieron 6. */}
+                {videoWarnings.length > 0 ? (
+                  <p className="rounded-md border border-hairline bg-panel-raised/40 px-2.5 py-2 text-micro leading-relaxed tracking-normal text-ink-muted">
+                    {videoWarnings.map((w) => describeChange(videoModel?.label ?? "This model", w)).join(" ")}
+                  </p>
+                ) : null}
+
                 <p className="text-micro tracking-normal text-ink-faint">
                   Used when you animate a still. Charged separately.
                 </p>

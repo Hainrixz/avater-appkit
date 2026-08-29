@@ -3,6 +3,7 @@
 import { Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCredits, formatUsd } from "@/lib/format";
+import { describeChange } from "@/lib/provider/higgsfield/normalize";
 import { getRecipe } from "@/lib/recipes";
 import { isTerminalPhase, type ClientJob } from "@/lib/client/store";
 import { GenerationProgress } from "./GenerationProgress";
@@ -84,7 +85,7 @@ export function ResultsGrid({
 
             {job.warnings.length > 0 ? (
               <p className="rounded-md border border-hairline bg-panel px-3 py-2 text-meta text-ink-muted">
-                {job.warnings.map((w) => `${String(w.field)}: ${String(w.from)} → ${String(w.to ?? "n/a")}`).join(" · ")}
+                {job.warnings.map((w) => describeChange(job.modelLabel, w)).join(" ")}
               </p>
             ) : null}
 

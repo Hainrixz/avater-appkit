@@ -65,6 +65,7 @@ export const MODELS: ModelSpec[] = [
       enhancePrompt: true,
     },
     defaults: { aspectRatio: "9:16", resolution: "1080p", batchSize: 4, enhancePrompt: true },
+    note: "Keeps the reference photo's setting. Great for restyling a shot, wrong for moving someone somewhere new.",
     recipes: ["teleport"],
     buildBody(i) {
       const body: Record<string, unknown> = {

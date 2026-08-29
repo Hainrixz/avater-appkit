@@ -77,8 +77,10 @@ export function encodeDuration(
  * nota bajo el selector.
  */
 export function diffCapabilities(
-  to: ModelSpec,
-  input: GenerationInput,
+  /* Sólo necesita `supports`, así que acepta un PublicModelSpec: el navegador
+     puede razonar sobre capacidades sin recibir jamás un buildBody. */
+  to: Pick<ModelSpec, "supports">,
+  input: Partial<GenerationInput>,
 ): CapabilityChange[] {
   const changes: CapabilityChange[] = [];
   const s = to.supports;

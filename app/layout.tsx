@@ -4,6 +4,9 @@ import { satoshi, generalSans } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  /* Necesario para que las URLs de opengraph-image salgan absolutas. En local apunta
+     a localhost; al desplegar, se define SITE_URL y las tarjetas sociales funcionan. */
+  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: "Avatar App Kit — put yourself anywhere",
   description:
     "An open-source studio for the Higgsfield API. Bring your own key, drop a photo, and get yourself in another place, in another outfit, or beside someone else. Runs on your machine.",

@@ -99,7 +99,7 @@ export function ModelSwitcher({
                   <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-rose" />
                 ) : null}
 
-                <span className="min-w-0 flex-1 text-left">
+                <span className="min-w-0 flex-1 whitespace-normal text-left">
                   <span className="block truncate text-ui font-medium text-ink">
                     {m.label}
                   </span>
@@ -109,6 +109,11 @@ export function ModelSwitcher({
                       ? ` · ${m.supports.durationsSec.join("/")}s`
                       : ""}
                   </span>
+                  {m.note ? (
+                    <span className="mt-0.5 block text-micro leading-snug tracking-normal text-warn">
+                      {m.note}
+                    </span>
+                  ) : null}
                 </span>
 
                 <span className="shrink-0 text-right">
