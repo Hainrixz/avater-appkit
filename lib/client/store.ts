@@ -28,7 +28,6 @@ import type {
  */
 
 export type JobPhase =
-  | "draft"
   | "uploading"
   | "submitting"
   | "queued"
@@ -50,6 +49,18 @@ export const TERMINAL_PHASES: readonly JobPhase[] = [
 ];
 
 export const isTerminalPhase = (p: JobPhase) => TERMINAL_PHASES.includes(p);
+
+/** Fases realmente en vuelo. Se enumeran EN POSITIVO a propósito: definir "en curso"
+ *  como "no terminal" hacía que cualquier fase inesperada —o heredada de una versión
+ *  anterior— se dibujara como un spinner eterno. */
+export const ACTIVE_PHASES: readonly JobPhase[] = [
+  "uploading",
+  "submitting",
+  "queued",
+  "in_progress",
+];
+
+export const isActivePhase = (p: JobPhase) => ACTIVE_PHASES.includes(p);
 
 /** Los resultados se borran del servidor a los ~7 días. */
 export const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -239,11 +250,15 @@ export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
+      /* Un trabajo en "uploading" nunca llegó a enviarse, así que guardarlo sólo
+         produce una tarjeta fantasma que revive en cada visita y se queda en
+         "Rendering" para siempre. No se persiste. */
+      const keep = state.order
+        .filter((id) => state.jobs[id] && state.jobs[id]!.phase !== "uploading")
+        .slice(0, 60);
       const payload = {
-        order: state.order.slice(0, 60),
-        jobs: Object.fromEntries(
-          state.order.slice(0, 60).map((id) => [id, serializable(state.jobs[id]!)]),
-        ),
+        order: keep,
+        jobs: Object.fromEntries(keep.map((id) => [id, serializable(state.jobs[id]!)])),
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
@@ -263,7 +278,19 @@ export function rehydrate() {
     };
     const jobs: Record<string, ClientJob> = {};
     for (const [id, j] of Object.entries(parsed.jobs ?? {})) {
-      jobs[id] = { ...j, previews: [], sourcePreview: undefined };
+      const revived: ClientJob = { ...j, previews: [], sourcePreview: undefined };
+      /* Restos de la versión rota de Retry, que aparcaba el trabajo en "draft" con su
+         requestId intacto. La tarjeta ya no significa nada: se descarta. */
+      if ((revived.phase as string) === "draft") continue;
+      /* Sin requestId y sin fase terminal significa que la recarga nos pilló entre el
+         POST y su respuesta. No se puede reconciliar —la API no tiene endpoint para
+         listar peticiones— así que se dice exactamente eso en vez de dejar una tarjeta
+         girando eternamente. */
+      if (!revived.requestId && !TERMINAL_PHASES.includes(revived.phase)) {
+        revived.phase = "unknown_submit";
+        revived.nextPollAt = Number.MAX_SAFE_INTEGER;
+      }
+      jobs[id] = revived;
     }
     state = { ...state, jobs, order: parsed.order ?? [] };
     emit();

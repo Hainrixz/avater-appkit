@@ -12,7 +12,7 @@ import { RECIPE_LIST, getRecipe, type Recipe } from "@/lib/recipes";
 import { formatCredits, formatUsd } from "@/lib/format";
 import * as api from "@/lib/client/api";
 import {
-  isTerminalPhase,
+  isActivePhase,
   jobList,
   rehydrate,
   useAppState,
@@ -20,7 +20,7 @@ import {
   type ClientJob,
 } from "@/lib/client/store";
 import { attachVisibilityResume, ensureRunning } from "@/lib/client/job-runner";
-import { recheckJob, retryJob, submitStill, submitVideo } from "@/lib/client/actions";
+import { recheckJob, resubmitJob, submitStill, submitVideo } from "@/lib/client/actions";
 import { describeChange, diffCapabilities, snapEnum } from "@/lib/provider/higgsfield/normalize";
 import { ApiKeyGate } from "./ApiKeyGate";
 import { ModelSwitcher } from "./ModelSwitcher";
@@ -277,6 +277,8 @@ export function StudioShell() {
   async function generate() {
     if (!ready || submitting) return;
     const localId = crypto.randomUUID();
+    /* Se congela lo que se envía en este instante, para poder comparar después. */
+    const slotFilesAtSubmit = recipe.slots.map((sl) => slots[sl.id]!);
     setSubmitting(true);
     try {
       await submitStill({
@@ -286,17 +288,23 @@ export function StudioShell() {
         modelId: stillModelId,
         userPrompt: prompt,
         count: effectiveCount,
-        slotFiles: recipe.slots.map((sl) => slots[sl.id]!),
+        slotFiles: slotFilesAtSubmit,
         estimate: estimate ?? undefined,
         autoAnimate: wantsVideo
           ? { modelId: videoModelId, durationSec: effectiveDuration, userPrompt: prompt }
           : undefined,
+        /* La URL subida se escribe SÓLO si la ranura sigue teniendo el mismo archivo.
+           Si el usuario cambia la foto mientras la anterior aún se sube, escribir por
+           índice le pegaría la URL vieja a la foto nueva, y el siguiente Generate
+           usaría en silencio la imagen que ya descartó. */
         onUploaded: (i, url) => {
           const slotId = recipe.slots[i]!.id;
-          setSlots((prev) => ({
-            ...prev,
-            [slotId]: prev[slotId] ? { ...prev[slotId]!, remoteUrl: url } : prev[slotId]!,
-          }));
+          const sent = slotFilesAtSubmit[i];
+          setSlots((prev) => {
+            const current = prev[slotId];
+            if (!current || !sent || current.file !== sent.file) return prev;
+            return { ...prev, [slotId]: { ...current, remoteUrl: url } };
+          });
         },
       });
     } catch (e) {
@@ -326,9 +334,15 @@ export function StudioShell() {
     }
   }
 
-  function retry(job: ClientJob) {
-    retryJob(job.localId);
-    toast("Inputs kept — adjust and hit Generate.");
+  async function retry(job: ClientJob) {
+    /* Reintentar reenvía de verdad. Las imágenes ya están subidas, así que no se
+       vuelve a subir nada y no se pide otra confirmación de precio: es el mismo
+       trabajo, al mismo coste que ya se mostró. */
+    try {
+      await resubmitJob(job);
+    } catch (e) {
+      toast.error(e instanceof AppError ? e.message : "Couldn't retry.");
+    }
   }
 
   function checkAgain(job: ClientJob) {
@@ -343,7 +357,7 @@ export function StudioShell() {
   /* ---------------- render ---------------- */
 
   const locked = state.ready && !state.key.connected;
-  const activeCount = jobs.filter((j) => !isTerminalPhase(j.phase)).length;
+  const activeCount = jobs.filter((j) => isActivePhase(j.phase)).length;
 
   return (
     <div className="relative min-h-dvh">
@@ -478,6 +492,7 @@ export function StudioShell() {
             <SlotDropzone
               recipe={recipe}
               values={slots}
+              disabled={submitting}
               onChange={(id, v) => setSlots((prev) => ({ ...prev, [id]: v }))}
             />
 
@@ -646,7 +661,7 @@ export function StudioShell() {
             jobs={jobs}
             canAnimate={recipe.canAnimate && videoModels.length > 0}
             onAnimate={(job, url) => void animate(job, url)}
-            onRetry={retry}
+            onRetry={(job) => void retry(job)}
             onCheckAgain={checkAgain}
           />
         </div>

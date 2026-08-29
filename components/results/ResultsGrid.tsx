@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatCredits, formatUsd } from "@/lib/format";
 import { describeChange } from "@/lib/provider/higgsfield/normalize";
 import { getRecipe } from "@/lib/recipes";
-import { isTerminalPhase, type ClientJob } from "@/lib/client/store";
+import { isActivePhase, type ClientJob } from "@/lib/client/store";
 import { GenerationProgress } from "./GenerationProgress";
 import { TerminalState } from "./TerminalState";
 import { ResultCard } from "./ResultCard";
@@ -45,7 +45,7 @@ export function ResultsGrid({
     <div className="flex flex-col gap-8">
       {jobs.map((job) => {
         const recipe = getRecipe(job.recipe);
-        const running = !isTerminalPhase(job.phase);
+        const running = isActivePhase(job.phase);
         const failedish =
           job.phase === "failed" ||
           job.phase === "nsfw" ||

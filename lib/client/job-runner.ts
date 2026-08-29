@@ -48,7 +48,13 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 
 function pollable(): ClientJob[] {
-  return jobList().filter((j) => j.requestId && !isTerminalPhase(j.phase));
+  return jobList().filter(
+    (j) =>
+      j.requestId &&
+      !isTerminalPhase(j.phase) &&
+      // Centinela = "aún no toca sondear". Nunca debe llegar a setTimeout.
+      j.nextPollAt < Number.MAX_SAFE_INTEGER,
+  );
 }
 
 async function pollOne(job: ClientJob): Promise<void> {
@@ -136,7 +142,11 @@ async function tick(): Promise<void> {
     return;
   }
   const soonest = Math.min(...remaining.map((j) => j.nextPollAt));
-  schedule(Math.max(250, soonest - Date.now()));
+  const wait = soonest - Date.now();
+  // Cinturón: setTimeout recibe un long de 32 bits, así que cualquier retraso enorme
+  // se trunca y puede salir negativo (9007199254740991|0 === -1), disparando ya y
+  // girando sin parar. El sondeo real nunca pasa de 10.5s, así que el tope no molesta.
+  schedule(Number.isFinite(wait) ? Math.min(30_000, Math.max(250, wait)) : 30_000);
 }
 
 function schedule(ms: number): void {

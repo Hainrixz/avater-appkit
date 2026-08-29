@@ -8,6 +8,7 @@ import { ensureRunning } from "./job-runner";
 import {
   hashInput,
   patchJob,
+  removeJob,
   upsertJob,
   type AutoAnimate,
   type ClientJob,
@@ -236,11 +237,82 @@ export async function runAutoAnimate(
   });
 }
 
-export function retryJob(localId: string): void {
-  patchJob(localId, { phase: "draft", error: undefined, images: [], pollAttempts: 0 });
+/**
+ * REINTENTAR ES VOLVER A ENVIAR, NO APARCAR EN "draft".
+ *
+ * La versión anterior hacía `patchJob(id, { phase: "draft" })` y dejaba intactos el
+ * `requestId` y el `nextPollAt: Number.MAX_SAFE_INTEGER` que se estampan al llegar a
+ * un estado terminal. Eso rompía tres cosas a la vez, y una era grave:
+ *
+ *  - "draft" no está en TERMINAL_PHASES, así que `pollable()` volvía a aceptar el
+ *    trabajo. El planificador calculaba `soonest = 9007199254740991` y se lo pasaba a
+ *    setTimeout, que lo trunca a un long de 32 bits: 9007199254740991|0 === -1, o sea
+ *    delay negativo, o sea dispara ya. El bucle giraba ~250 veces por segundo durante
+ *    toda la vida de la pestaña, y como el trabajo se persistía en localStorage,
+ *    volvía a armarse en cada recarga.
+ *  - La tarjeta se quedaba en "Rendering" para siempre y sumaba al contador de
+ *    "N running", porque ResultsGrid trata cualquier fase no terminal como en curso.
+ *  - Al volver a la pestaña, attachVisibilityResume sondeaba el requestId muerto y
+ *    revertía la tarjeta a "failed", deshaciendo el reintento en silencio.
+ *
+ * Además el toast prometía "Inputs kept" y el formulario nunca se rellenaba: mentía.
+ *
+ * Ahora reintentar hace lo que dice: reenvía la MISMA entrada —las imágenes ya están
+ * subidas, así que no se vuelve a subir nada— con una clave de idempotencia nueva, y
+ * la tarjeta muerta desaparece. La fase "draft" ya no se le asigna nunca a un trabajo.
+ */
+export async function resubmitJob(job: ClientJob): Promise<void> {
+  const localId = crypto.randomUUID();
+
+  upsertJob({
+    ...job,
+    localId,
+    requestId: undefined,
+    statusUrl: undefined,
+    cancelUrl: undefined,
+    correlationId: undefined,
+    error: undefined,
+    images: [],
+    videoUrl: undefined,
+    phase: "submitting",
+    createdAt: Date.now(),
+    submittedAt: undefined,
+    completedAt: undefined,
+    expiresAt: undefined,
+    pollAttempts: 0,
+    nextPollAt: Number.MAX_SAFE_INTEGER,
+    chained: false,
+  });
+  removeJob(job.localId);
+
+  try {
+    const res = await api.submit(job.input, localId);
+    patchJob(localId, {
+      phase: res.status === "queued" ? "queued" : "in_progress",
+      requestId: res.id,
+      statusUrl: res.statusUrl,
+      cancelUrl: res.cancelUrl,
+      correlationId: res.correlationId,
+      submittedAt: Date.now(),
+      nextPollAt: Date.now() + 2000,
+    });
+    ensureRunning();
+  } catch (e) {
+    throw finish(localId, e);
+  }
 }
 
+/**
+ * `submittedAt` TIENE que moverse. El presupuesto de 5 minutos en pollOne se mide
+ * contra él, así que dejarlo en el envío original hacía que "Check again" volviera a
+ * expirar en el primer sondeo — el botón parecía no hacer absolutamente nada.
+ */
 export function recheckJob(localId: string): void {
-  patchJob(localId, { phase: "in_progress", nextPollAt: Date.now(), pollAttempts: 0 });
+  patchJob(localId, {
+    phase: "in_progress",
+    nextPollAt: Date.now(),
+    pollAttempts: 0,
+    submittedAt: Date.now(),
+  });
   ensureRunning();
 }

@@ -28,6 +28,56 @@ interface DropSlotProps {
 
 type SlotState = "idle" | "over" | "invalid" | "busy" | "filled";
 
+/**
+ * UN SOLO OYENTE DE `paste` PARA TODA LA PÁGINA.
+ *
+ * Antes cada DropSlot registraba el suyo en `window` sin comprobar de quién era el
+ * evento, así que en Try-on o Duo un único Cmd+V metía la MISMA foto en las dos
+ * ranuras: la prenda acababa también en "You", y el usuario generaba con una entrada
+ * que nunca eligió.
+ *
+ * Ahora hay un registro de módulo en orden de montaje y un único oyente que decide
+ * un destinatario: la ranura enfocada si la hay; si no, la primera que esté vacía.
+ * Ese es el comportamiento que la gente espera de pegar.
+ */
+interface Registered {
+  el: HTMLElement | null;
+  isFilled: () => boolean;
+  accept: (f: File) => void;
+}
+
+const slotRegistry: Registered[] = [];
+let pasteListenerAttached = false;
+
+function onWindowPaste(e: ClipboardEvent) {
+  const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
+    i.type.startsWith("image/"),
+  );
+  const file = item?.getAsFile();
+  if (!file || slotRegistry.length === 0) return;
+
+  const active = document.activeElement;
+  const focused = slotRegistry.find((r) => r.el && active && r.el.contains(active));
+  const target = focused ?? slotRegistry.find((r) => !r.isFilled()) ?? slotRegistry[0];
+  target?.accept(file);
+}
+
+function registerSlot(entry: Registered): () => void {
+  slotRegistry.push(entry);
+  if (!pasteListenerAttached && typeof window !== "undefined") {
+    window.addEventListener("paste", onWindowPaste);
+    pasteListenerAttached = true;
+  }
+  return () => {
+    const i = slotRegistry.indexOf(entry);
+    if (i >= 0) slotRegistry.splice(i, 1);
+    if (slotRegistry.length === 0 && pasteListenerAttached) {
+      window.removeEventListener("paste", onWindowPaste);
+      pasteListenerAttached = false;
+    }
+  };
+}
+
 export function DropSlot({ compact, label, hint, value, onChange, disabled }: DropSlotProps) {
   /* El estado se DERIVA: la interacción manda mientras dura, y si no, la verdad
      es si hay foto o no. Sincronizarlo con un efecto provocaba renders en cascada. */
@@ -82,22 +132,30 @@ export function DropSlot({ compact, label, hint, value, onChange, disabled }: Dr
   }, [onChange, value]);
 
   // Pegar desde el portapapeles: en una app de fotos es la mitad de los aportes.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const acceptRef = useRef(accept);
+  const filledRef = useRef(Boolean(value));
+
+  /* Los refs se refrescan en un efecto, no durante el render: el oyente global vive
+     más que cualquier render y necesita leer siempre los valores actuales. */
+  useEffect(() => {
+    acceptRef.current = accept;
+    filledRef.current = Boolean(value);
+  });
+
   useEffect(() => {
     if (disabled) return;
-    const onPaste = (e: ClipboardEvent) => {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
-        i.type.startsWith("image/"),
-      );
-      const file = item?.getAsFile();
-      if (file) void accept(file);
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [accept, disabled]);
+    return registerSlot({
+      el: rootRef.current,
+      isFilled: () => filledRef.current,
+      accept: (f) => void acceptRef.current(f),
+    });
+  }, [disabled]);
 
   return (
     <div className="flex flex-col gap-2">
       <div
+        ref={rootRef}
         data-dropslot
         data-state={state}
         role="button"
