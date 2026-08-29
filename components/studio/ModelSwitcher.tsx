@@ -132,7 +132,7 @@ export function ModelSwitcher({
                       </span>
                     </>
                   ) : (
-                    <span className="text-meta text-ink-faint">—</span>
+                    <span className="text-meta text-ink-faint">checking…</span>
                   )}
                 </span>
               </div>

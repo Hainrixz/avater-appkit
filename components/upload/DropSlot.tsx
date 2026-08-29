@@ -98,7 +98,7 @@ export function DropSlot({ compact, label, hint, value, onChange, disabled }: Dr
   return (
     <div className="flex flex-col gap-2">
       <div
-        data-slot
+        data-dropslot
         data-state={state}
         role="button"
         tabIndex={disabled ? -1 : 0}

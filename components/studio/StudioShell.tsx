@@ -50,7 +50,11 @@ export function StudioShell() {
   const probe = useCallback(async (force: boolean) => {
     setState({ probing: true });
     try {
-      const res = await api.probeModels("curated", force);
+      // "all" y no "curated": con sólo los curados, los modelos extendidos salían
+      // con un guión mudo en el selector. 15 modelos tardan ~7s en segundo plano,
+      // mientras el usuario suelta la foto, y a cambio cada fila dice un precio real
+      // o un motivo real. Un guión no informa de nada.
+      const res = await api.probeModels("all", force);
       setState((s) => ({ availability: { ...s.availability, ...res.availability } }));
     } catch (e) {
       if (e instanceof AppError && e.kind === "unauthorized") {
@@ -473,6 +477,33 @@ export function StudioShell() {
                 {recipe.aspectRatio} · video inherits this from the still
               </p>
             </div>
+
+            {/* El segundo selector es el que de verdad importa: la etapa de imagen
+                suele tener un solo motor sensato, mientras que animar tiene una
+                docena. Cambiar aquí de Kling a Hailuo o a Wan no toca nada más del
+                flujo — el normalizador traduce el body y avisa de lo que ajustó. */}
+            {recipe.canAnimate && videoModels.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <span className="text-meta font-medium text-ink-muted">
+                  Animate with
+                </span>
+                <ModelSwitcher
+                  label="Animate model"
+                  models={videoModels}
+                  availability={state.availability}
+                  value={videoModelId}
+                  probing={state.probing}
+                  onChange={(id) =>
+                    setState((s) => ({
+                      videoModelByRecipe: { ...s.videoModelByRecipe, [s.recipe]: id },
+                    }))
+                  }
+                />
+                <p className="text-micro tracking-normal text-ink-faint">
+                  Used when you animate a still. Charged separately.
+                </p>
+              </div>
+            ) : null}
 
             {recipe.counts.length > 1 ? (
               <div className="flex items-center gap-2">
