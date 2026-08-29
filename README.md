@@ -1,5 +1,7 @@
 # Avatar App Kit
 
+![Avatar App Kit](.github/banner.jpg)
+
 **Put yourself anywhere.** A local, open-source studio for the [Higgsfield API](https://docs.higgsfield.ai/docs) — drop a photo, get yourself in another city, in a jacket you don't own, or standing next to someone three time zones away.
 
 You bring your own API key. Nothing is hardcoded, nothing is stored, and it runs on your machine.
@@ -74,6 +76,7 @@ npm run build         # production build
 npm run typecheck     # tsc --noEmit
 npm run lint          # eslint
 npm run check:models  # the buildBody contract test — no network, no credits
+npm run banner        # re-shoot .github/banner.jpg from the running app
 ```
 
 ## Making it yours

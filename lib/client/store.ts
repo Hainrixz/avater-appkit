@@ -120,7 +120,28 @@ const initial: AppState = {
 let state: AppState = initial;
 const listeners = new Set<() => void>();
 
+/**
+ * La lista derivada se CACHEA, y no es un detalle de rendimiento: es corrección.
+ *
+ * `useSyncExternalStore` compara el snapshot por identidad. Si el selector construye
+ * un array nuevo en cada llamada —que es lo que hacía `jobList()` mapeando `order`—
+ * React ve un valor distinto en cada render, vuelve a renderizar, vuelve a construirlo,
+ * y entra en bucle hasta "Maximum update depth exceeded".
+ *
+ * Se recalcula UNA vez por mutación, dentro de emit(), y todo el mundo lee la misma
+ * referencia hasta la siguiente.
+ */
+const EMPTY_JOBS: ClientJob[] = [];
+let cachedJobs: ClientJob[] = EMPTY_JOBS;
+
+function recomputeJobs() {
+  cachedJobs = state.order
+    .map((id) => state.jobs[id])
+    .filter(Boolean) as ClientJob[];
+}
+
 function emit() {
+  recomputeJobs();
   for (const l of listeners) l();
 }
 
@@ -166,19 +187,20 @@ export function removeJob(localId: string) {
   persist();
 }
 
+/** Referencia estable entre renders. Ver la nota de cachedJobs. */
 export function jobList(): ClientJob[] {
-  return state.order.map((id) => state.jobs[id]).filter(Boolean) as ClientJob[];
+  return cachedJobs;
 }
 
 /* ---------------- hooks ---------------- */
 
-const serverSnapshot = () => initial;
-
 export function useAppState<T>(selector: (s: AppState) => T): T {
+  // `initial` y `cachedJobs` son constantes de módulo, así que el snapshot de
+  // servidor es estable y no dispara el aviso de getServerSnapshot.
   return useSyncExternalStore(
     subscribe,
     () => selector(state),
-    () => selector(serverSnapshot()),
+    () => selector(initial),
   );
 }
 

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "check:models": "tsx tests/models.ts"
+    "check:models": "tsx tests/models.ts",
+    "banner": "tsx scripts/shoot-banner.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -34,6 +35,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"

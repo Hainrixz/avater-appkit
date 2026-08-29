@@ -399,7 +399,10 @@ export function StudioShell() {
           className={locked ? "pointer-events-none select-none opacity-35" : undefined}
           {...(locked ? { inert: "" as unknown as boolean } : {})}
         >
-          <div className="sticky top-[88px] flex flex-col gap-5 rounded-xl border border-hairline bg-panel p-5">
+          {/* El raíl es pegajoso PERO con scroll propio: en una pantalla de portátil el
+              panel es más alto que el viewport, y sin esto el botón Generate queda
+              debajo del borde y no hay forma de alcanzarlo. */}
+          <div className="sticky top-[88px] flex max-h-[calc(100dvh-104px)] flex-col gap-5 overflow-y-auto overscroll-contain rounded-xl border border-hairline bg-panel p-5">
             <Tabs
               value={state.recipe}
               onValueChange={(v) => {

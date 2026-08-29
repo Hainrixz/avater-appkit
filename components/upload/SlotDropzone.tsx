@@ -25,6 +25,7 @@ export function SlotDropzone({ recipe, values, onChange, disabled }: SlotDropzon
     const slot = slots[0]!;
     return (
       <DropSlot
+        compact
         label={slot.label}
         hint={slot.hint}
         value={values[slot.id] ?? null}

@@ -17,6 +17,8 @@ export interface SlotValue extends PreparedFile {
 }
 
 interface DropSlotProps {
+  /** Una sola ranura ocupa todo el ancho del raíl, así que 3:4 la haría enorme. */
+  compact?: boolean;
   label: string;
   hint?: string;
   value: SlotValue | null;
@@ -26,7 +28,7 @@ interface DropSlotProps {
 
 type SlotState = "idle" | "over" | "invalid" | "busy" | "filled";
 
-export function DropSlot({ label, hint, value, onChange, disabled }: DropSlotProps) {
+export function DropSlot({ compact, label, hint, value, onChange, disabled }: DropSlotProps) {
   /* El estado se DERIVA: la interacción manda mientras dura, y si no, la verdad
      es si hay foto o no. Sincronizarlo con un efecto provocaba renders en cascada. */
   const [interaction, setInteraction] = useState<Exclude<SlotState, "filled">>("idle");
@@ -128,7 +130,8 @@ export function DropSlot({ label, hint, value, onChange, disabled }: DropSlotPro
           void accept(e.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "group relative aspect-3/4 w-full overflow-hidden rounded-[14px]",
+          "group relative w-full overflow-hidden rounded-[14px]",
+          compact ? "aspect-4/3" : "aspect-3/4",
           "border-[1.5px] border-dashed bg-panel",
           "flex flex-col items-center justify-center gap-1.5 text-center",
           "transition-[border-color,background-color,transform] duration-[140ms] ease-out",
