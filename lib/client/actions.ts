@@ -5,7 +5,13 @@ import type { CapabilityChange, GenerationInput, PublicModelSpec } from "@/lib/s
 import type { Recipe } from "@/lib/recipes";
 import * as api from "./api";
 import { ensureRunning } from "./job-runner";
-import { hashInput, patchJob, upsertJob, type ClientJob } from "./store";
+import {
+  hashInput,
+  patchJob,
+  upsertJob,
+  type AutoAnimate,
+  type ClientJob,
+} from "./store";
 
 /**
  * Las mutaciones viven FUERA del componente.
@@ -40,6 +46,8 @@ export interface SubmitStillArgs {
   estimate?: { credits: number; usd: number };
   /** Se llama con la URL pública tras subir, para poder cachearla en el formulario. */
   onUploaded?: (slotIndex: number, url: string) => void;
+  /** En modo vídeo, lo que hay que animar en cuanto la foto esté lista. */
+  autoAnimate?: AutoAnimate;
 }
 
 function buildStillInput(a: SubmitStillArgs, imageUrls: string[]): GenerationInput {
@@ -74,6 +82,7 @@ export async function submitStill(a: SubmitStillArgs): Promise<void> {
     nextPollAt: Number.MAX_SAFE_INTEGER,
     expectedCount: a.count,
     etaSeconds: a.model?.medianSeconds ?? 10,
+    autoAnimate: a.autoAnimate,
     estimate: a.estimate
       ? { credits: a.estimate.credits, usd: a.estimate.usd, raw: { credits: "", usd: "" } }
       : undefined,
@@ -187,6 +196,44 @@ function finish(localId: string, e: unknown): AppError {
     error: err.toPayload(),
   });
   return err;
+}
+
+/**
+ * ENCADENADO AUTOMÁTICO foto -> vídeo.
+ *
+ * Todos los modelos de vídeo verificados exigen una imagen de entrada, así que por
+ * dentro esto siempre son dos llamadas. Eso es arquitectura, no una decisión que le
+ * toque tomar al usuario: si pidió vídeo, la app hace los dos pasos sola y le cobra
+ * el total que ya le enseñó. El botón "Animate" sigue existiendo para el modo foto,
+ * cuando uno mira las cuatro tomas y decide cuál merece moverse.
+ *
+ * Lo dispara el runner de sondeo al ver `completed`, y `chained` evita que dos
+ * sondeos casi simultáneos lancen dos vídeos.
+ */
+export async function runAutoAnimate(
+  parent: ClientJob,
+  recipe: Recipe,
+  model: PublicModelSpec | undefined,
+): Promise<void> {
+  const plan = parent.autoAnimate;
+  const first = parent.images[0];
+  if (!plan || !first || parent.chained) return;
+
+  patchJob(parent.localId, { chained: true });
+
+  await submitVideo({
+    localId: crypto.randomUUID(),
+    parentLocalId: parent.localId,
+    recipe,
+    model,
+    modelId: plan.modelId,
+    userPrompt: plan.userPrompt,
+    imageUrl: first,
+    durationSec: plan.durationSec,
+    warnings: [],
+  }).catch(() => {
+    /* submitVideo ya dejó el trabajo hijo en estado de error y visible en la rejilla. */
+  });
 }
 
 export function retryJob(localId: string): void {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, LogOut, RefreshCw, Sparkles } from "lucide-react";
+import { Film, Image as ImageIcon, Loader2, LogOut, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -73,7 +73,14 @@ export function StudioShell() {
      modelo para que el ajuste sea visible: si pide 5s y pasa a Hailuo, que sólo hace
      6 y 10, la app usa 6 y lo dice, en vez de fingir que el usuario pidió 6. */
   const [preferredDuration, setPreferredDuration] = useState(5);
+  /* El presupuesto del vídeo lleva pegado a qué modelo y duración corresponde. Sin eso,
+     al cambiar de modelo se enseñaría el precio anterior durante el rebote de 250ms —
+     un total equivocado en el botón, que es justo lo que no puede pasar. */
+  const [videoEstimate, setVideoEstimate] = useState<
+    { credits: number; usd: number; modelId: string; durationSec: number } | null
+  >(null);
   const estimateAbort = useRef<AbortController | null>(null);
+  const videoEstimateAbort = useRef<AbortController | null>(null);
 
   const recipe = getRecipe(state.recipe);
   const jobs = useAppState(() => jobList());
@@ -158,6 +165,11 @@ export function StudioShell() {
 
   /* ---------------- entrada actual ---------------- */
 
+  const wantsVideo = state.outputMode === "video";
+  /* En modo vídeo se genera UNA sola foto: es la que se va a animar, y pagar cuatro
+     para tirar tres sería cobrarle al usuario por nada. */
+  const effectiveCount = wantsVideo ? 1 : count;
+
   const filled = recipe.slots.map((s) => slots[s.id]).filter(Boolean) as SlotValue[];
   const ready =
     state.key.connected &&
@@ -191,7 +203,7 @@ export function StudioShell() {
             modelId: stillModelId,
             recipe: r,
             userPrompt: prompt,
-            count,
+            count: effectiveCount,
             resolution: stillResolution,
             imageUrls: r.slots.map(() => PRICE_PROBE_URL),
           }),
@@ -209,7 +221,56 @@ export function StudioShell() {
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [keyConnected, stillModelId, count, recipeId, prompt, stillResolution]);
+  }, [keyConnected, stillModelId, effectiveCount, recipeId, prompt, stillResolution]);
+
+  /* Segundo presupuesto: la etapa de vídeo. Se pide aparte porque es otro escalón de
+     precio, y el usuario tiene que ver el TOTAL antes de pulsar Generate. */
+  useEffect(() => {
+    if (!keyConnected || !wantsVideo || !videoModelId) return;
+    videoEstimateAbort.current?.abort();
+    const ctrl = new AbortController();
+    videoEstimateAbort.current = ctrl;
+
+    const id = setTimeout(async () => {
+      try {
+        const est = await api.estimate(
+          {
+            modelId: videoModelId,
+            prompt: "x",
+            imageUrls: [PRICE_PROBE_URL],
+            durationSec: effectiveDuration,
+          },
+          ctrl.signal,
+        );
+        setVideoEstimate({
+          credits: est.credits,
+          usd: est.usd,
+          modelId: videoModelId,
+          durationSec: effectiveDuration,
+        });
+      } catch {
+        setVideoEstimate(null);
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [keyConnected, wantsVideo, videoModelId, effectiveDuration]);
+
+  /* Sólo cuenta si es el presupuesto de ESTE modelo y ESTA duración. */
+  const liveVideoEstimate =
+    wantsVideo &&
+    videoEstimate &&
+    videoEstimate.modelId === videoModelId &&
+    videoEstimate.durationSec === effectiveDuration
+      ? videoEstimate
+      : null;
+
+  const totalCredits = (estimate?.credits ?? 0) + (liveVideoEstimate?.credits ?? 0);
+  const totalUsd = (estimate?.usd ?? 0) + (liveVideoEstimate?.usd ?? 0);
+  const priceReady = Boolean(estimate) && (!wantsVideo || Boolean(liveVideoEstimate));
 
   /* ---------------- generar ---------------- */
 
@@ -224,9 +285,12 @@ export function StudioShell() {
         model: stillModel,
         modelId: stillModelId,
         userPrompt: prompt,
-        count,
+        count: effectiveCount,
         slotFiles: recipe.slots.map((sl) => slots[sl.id]!),
         estimate: estimate ?? undefined,
+        autoAnimate: wantsVideo
+          ? { modelId: videoModelId, durationSec: effectiveDuration, userPrompt: prompt }
+          : undefined,
         onUploaded: (i, url) => {
           const slotId = recipe.slots[i]!.id;
           setSlots((prev) => ({
@@ -347,6 +411,51 @@ export function StudioShell() {
               panel es más alto que el viewport, y sin esto el botón Generate queda
               debajo del borde y no hay forma de alcanzarlo. */}
           <div className="sticky top-[88px] flex max-h-[calc(100dvh-104px)] flex-col gap-5 overflow-y-auto overscroll-contain rounded-xl border border-hairline bg-panel p-5">
+            {/*
+              LO PRIMERO ES QUÉ QUIERES, NO QUÉ MODELO.
+              El usuario probó la app y dijo "no puedo elegir si quiero imágenes o video,
+              sólo me muestra los modelos". Tenía razón: el flujo obligaba a generar una
+              foto y recién después aparecía un botón Animate en cada resultado. Por dentro
+              siguen siendo dos llamadas —todos los modelos de vídeo exigen imagen de
+              entrada— pero eso es arquitectura nuestra, no una decisión suya.
+            */}
+            <div className="flex flex-col gap-2">
+              <span className="text-meta font-medium text-ink-muted">I want</span>
+              <div
+                role="radiogroup"
+                aria-label="Output type"
+                className="grid grid-cols-2 gap-1 rounded-lg bg-canvas p-1"
+              >
+                {(
+                  [
+                    { id: "image", label: "Photos", icon: ImageIcon },
+                    { id: "video", label: "Video", icon: Film },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={state.outputMode === id}
+                    onClick={() => setState({ outputMode: id })}
+                    className={
+                      state.outputMode === id
+                        ? "flex items-center justify-center gap-2 rounded-md bg-panel-raised py-2 text-ui font-semibold text-ink"
+                        : "flex items-center justify-center gap-2 rounded-md py-2 text-ui text-ink-muted hover:text-ink"
+                    }
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-micro tracking-normal text-ink-faint">
+                {wantsVideo
+                  ? "One photo is generated first, then animated. Both steps are priced below."
+                  : "Stills you can download. You can animate any of them afterwards."}
+              </p>
+            </div>
+
             <Tabs
               value={state.recipe}
               onValueChange={(v) => {
@@ -477,7 +586,7 @@ export function StudioShell() {
               </div>
             ) : null}
 
-            {recipe.counts.length > 1 ? (
+            {recipe.counts.length > 1 && !wantsVideo ? (
               <div className="flex items-center gap-2">
                 <span className="text-meta font-medium text-ink-muted">Outputs</span>
                 <div className="flex gap-1">
@@ -512,10 +621,10 @@ export function StudioShell() {
                 </>
               ) : (
                 <>
-                  Generate
-                  {estimate ? (
+                  {wantsVideo ? "Generate video" : "Generate"}
+                  {priceReady ? (
                     <span className="ml-1 font-normal opacity-90 tnum">
-                      · {formatCredits(estimate.credits)} · {formatUsd(estimate.usd)}
+                      · {formatCredits(totalCredits)} · {formatUsd(totalUsd)}
                     </span>
                   ) : estimating ? (
                     <span className="ml-1 opacity-70">· pricing…</span>
@@ -523,6 +632,12 @@ export function StudioShell() {
                 </>
               )}
             </Button>
+
+            {wantsVideo && priceReady ? (
+              <p className="-mt-2 text-center text-micro tracking-normal text-ink-faint tnum">
+                photo {formatUsd(estimate!.usd)} + video {formatUsd(liveVideoEstimate!.usd)}
+              </p>
+            ) : null}
           </div>
         </div>
 

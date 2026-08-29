@@ -54,6 +54,16 @@ export const isTerminalPhase = (p: JobPhase) => TERMINAL_PHASES.includes(p);
 /** Los resultados se borran del servidor a los ~7 días. */
 export const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Qué quiere el usuario al final, decidido ANTES de generar. */
+export type OutputMode = "image" | "video";
+
+/** Encadenado automático: lo que hay que animar en cuanto la foto quede lista. */
+export interface AutoAnimate {
+  modelId: string;
+  durationSec: number;
+  userPrompt: string;
+}
+
 export interface ClientJob {
   localId: string;
   requestId?: string;
@@ -89,6 +99,10 @@ export interface ClientJob {
   nextPollAt: number;
   expectedCount: number;
   etaSeconds: number;
+  /** Sólo en trabajos de foto creados en modo vídeo. El runner lo dispara al terminar. */
+  autoAnimate?: AutoAnimate;
+  /** Evita encadenar dos veces si llegan dos sondeos casi a la vez. */
+  chained?: boolean;
 }
 
 export interface AppState {
@@ -100,6 +114,7 @@ export interface AppState {
   jobs: Record<string, ClientJob>;
   order: string[];
   recipe: RecipeId;
+  outputMode: OutputMode;
   stillModelByRecipe: Partial<Record<RecipeId, string>>;
   videoModelByRecipe: Partial<Record<RecipeId, string>>;
 }
@@ -113,6 +128,7 @@ const initial: AppState = {
   jobs: {},
   order: [],
   recipe: "teleport",
+  outputMode: "image",
   stillModelByRecipe: {},
   videoModelByRecipe: {},
 };

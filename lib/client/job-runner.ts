@@ -63,6 +63,8 @@ async function pollOne(job: ClientJob): Promise<void> {
     const phase = STATUS_TO_PHASE[res.status] ?? "in_progress";
     const terminal = isTerminalPhase(phase);
     const completedAt = terminal ? Date.now() : undefined;
+    const shouldChain =
+      phase === "completed" && Boolean(job.autoAnimate) && !job.chained && (res.images?.length ?? 0) > 0;
 
     patchJob(job.localId, {
       phase,
@@ -86,6 +88,21 @@ async function pollOne(job: ClientJob): Promise<void> {
       completedAt,
       expiresAt: completedAt ? completedAt + RETENTION_MS : job.expiresAt,
     });
+
+    if (shouldChain) {
+      // Import dinámico a propósito: actions.ts importa este módulo para ensureRunning,
+      // así que un import estático cerraría el ciclo. El encadenado es un evento raro.
+      const [{ runAutoAnimate }, { getRecipe }, { getState }] = await Promise.all([
+        import("./actions"),
+        import("@/lib/recipes"),
+        import("./store"),
+      ]);
+      const fresh = getState().jobs[job.localId];
+      if (fresh) {
+        const model = getState().models.find((m) => m.id === fresh.autoAnimate?.modelId);
+        await runAutoAnimate(fresh, getRecipe(fresh.recipe), model);
+      }
+    }
   } catch (e) {
     // Sólo 401 y 404 son definitivos. Red y 5xx se reintentan: es un GET, es seguro.
     if (e instanceof AppError && (e.kind === "unauthorized" || e.kind === "not_found")) {
