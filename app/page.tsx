@@ -149,8 +149,8 @@ export default function HomePage() {
         >
           <div className="relative aspect-9/16 overflow-hidden rounded-2xl border border-hairline bg-panel shadow-[var(--shadow-lift)]">
             <img
-              src="/demo/after.svg"
-              alt="A generated portrait placed in a neon city at night"
+              src="/demo/after.jpg"
+              alt="The same person, generated onto a Tokyo street at night"
               className="absolute inset-0 size-full object-cover"
             />
             <div
@@ -189,12 +189,12 @@ export default function HomePage() {
               {i === 1 ? (
                 <div className="mt-4">
                   <BeforeAfterSlider
-                    beforeSrc="/demo/before.svg"
-                    afterSrc="/demo/after.svg"
+                    beforeSrc="/demo/before.jpg"
+                    afterSrc="/demo/after.jpg"
                   />
                   <p className="mt-2 text-micro tracking-normal text-ink-faint">
-                    Drag to compare. Swap these two files in /public/demo with your own
-                    output.
+                    Drag to compare — both frames are real output from this app. Swap
+                    the two files in /public/demo with your own.
                   </p>
                 </div>
               ) : null}

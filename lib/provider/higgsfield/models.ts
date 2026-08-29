@@ -41,7 +41,10 @@ export const MODELS: ModelSpec[] = [
   /* ---------------- ETAPA A — imagen ---------------- */
   {
     id: "soul-reference",
-    label: "Soul Reference",
+    // "Restyle" y no "Teleport": reproduce el encuadre y el fondo de la referencia
+    // aplicando identidad y estilo. Es excelente para variaciones de una misma toma,
+    // y es la opción equivocada para mover a alguien de sitio. Medido, no supuesto.
+    label: "Soul Reference (restyle)",
     family: "Higgsfield Soul",
     path: "/higgsfield-ai/soul/reference",
     capability: "image->image",
@@ -98,7 +101,7 @@ export const MODELS: ModelSpec[] = [
       enhancePrompt: false,
     },
     defaults: { aspectRatio: "9:16", resolution: "720p", batchSize: 1 },
-    recipes: ["tryon", "duo"],
+    recipes: ["teleport", "tryon", "duo"],
     buildBody(i) {
       // Ojo: el MISMO GenerationInput.batchSize va a `num_images` (1..8) aquí y a
       // `batch_size` (enum 1|4) en soul-reference. Distinto nombre, distinto dominio.

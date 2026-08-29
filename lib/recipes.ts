@@ -48,7 +48,12 @@ export const RECIPES: Record<RecipeId, Recipe> = {
     slots: [
       { id: "subject", label: "You", hint: "A clear, front-facing photo" },
     ],
-    stillModelId: "soul-reference",
+    // popcorn/auto, NO soul/reference. Verificado a mano y cuesta ~$0.19 en pruebas
+    // descubrirlo: soul/reference reproduce la ESCENA de la foto de referencia junto
+    // con la cara, así que con un retrato de estudio te devuelve estudio por mucho que
+    // el prompt diga Tokio. No es cosa del prompt — se reescribió dos veces y falló
+    // igual. popcorn/auto sí compone al sujeto dentro de un escenario nuevo.
+    stillModelId: "popcorn-auto",
     videoModelId: "kling-2.5-turbo-pro-i2v",
     canAnimate: true,
     counts: [1, 4],
@@ -57,7 +62,7 @@ export const RECIPES: Record<RecipeId, Recipe> = {
     promptPlaceholder: "Tokyo at night",
     presets: PLACES,
     buildPrompt: (p) =>
-      `${p.trim()}. Same person as the reference, natural lighting that matches the scene, photographic, full colour.`,
+      `The person from the reference image, ${p.trim()}. The scene is visible behind and around them, with its light and colour falling on their face and clothes. Full-body candid photograph. Keep their face and build identical to the reference.`,
     buildVideoPrompt: (p) =>
       `${p.trim() || "the same scene"}. Subtle handheld camera drift, the person stays still and in frame.`,
   },
