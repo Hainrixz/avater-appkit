@@ -226,7 +226,7 @@ export function StudioShell() {
   /* Segundo presupuesto: la etapa de vídeo. Se pide aparte porque es otro escalón de
      precio, y el usuario tiene que ver el TOTAL antes de pulsar Generate. */
   useEffect(() => {
-    if (!keyConnected || !wantsVideo || !videoModelId) return;
+    if (!keyConnected || !videoModelId || !recipe.canAnimate) return;
     videoEstimateAbort.current?.abort();
     const ctrl = new AbortController();
     videoEstimateAbort.current = ctrl;
@@ -257,19 +257,18 @@ export function StudioShell() {
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [keyConnected, wantsVideo, videoModelId, effectiveDuration]);
+  }, [keyConnected, videoModelId, effectiveDuration, recipe.canAnimate]);
 
   /* Sólo cuenta si es el presupuesto de ESTE modelo y ESTA duración. */
   const liveVideoEstimate =
-    wantsVideo &&
     videoEstimate &&
     videoEstimate.modelId === videoModelId &&
     videoEstimate.durationSec === effectiveDuration
       ? videoEstimate
       : null;
 
-  const totalCredits = (estimate?.credits ?? 0) + (liveVideoEstimate?.credits ?? 0);
-  const totalUsd = (estimate?.usd ?? 0) + (liveVideoEstimate?.usd ?? 0);
+  const totalCredits = (estimate?.credits ?? 0) + (wantsVideo ? (liveVideoEstimate?.credits ?? 0) : 0);
+  const totalUsd = (estimate?.usd ?? 0) + (wantsVideo ? (liveVideoEstimate?.usd ?? 0) : 0);
   const priceReady = Boolean(estimate) && (!wantsVideo || Boolean(liveVideoEstimate));
 
   /* ---------------- generar ---------------- */
@@ -317,14 +316,19 @@ export function StudioShell() {
   /* ---------------- etapa 2: animar ---------------- */
 
   async function animate(parent: ClientJob, imageUrl: string) {
+    /* La receta y el texto salen del TRABAJO que se está animando. Antes se tomaban
+       del formulario actual, así que animar una foto vieja después de cambiar de
+       pestaña o de reescribir el prompt producía un vídeo de otra cosa. */
+    const parentRecipe = getRecipe(parent.recipe);
+    const parentPrompt = parent.autoAnimate?.userPrompt ?? prompt;
     try {
       await submitVideo({
         localId: crypto.randomUUID(),
         parentLocalId: parent.localId,
-        recipe,
+        recipe: parentRecipe,
         model: videoModel,
         modelId: videoModelId,
-        userPrompt: prompt,
+        userPrompt: parentPrompt,
         imageUrl,
         durationSec: effectiveDuration,
         warnings: videoWarnings,
@@ -659,6 +663,7 @@ export function StudioShell() {
         <div data-surface="stage" className="min-w-0 rounded-xl p-4">
           <ResultsGrid
             jobs={jobs}
+            videoPrice={liveVideoEstimate ? formatUsd(liveVideoEstimate.usd) : null}
             canAnimate={recipe.canAnimate && videoModels.length > 0}
             onAnimate={(job, url) => void animate(job, url)}
             onRetry={(job) => void retry(job)}

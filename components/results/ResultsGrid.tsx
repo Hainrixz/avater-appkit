@@ -12,6 +12,8 @@ import { ResultCard } from "./ResultCard";
 
 interface ResultsGridProps {
   jobs: ClientJob[];
+  /** Precio ya formateado del modelo de vídeo actual, para que animar no sea a ciegas. */
+  videoPrice?: string | null;
   onAnimate: (job: ClientJob, imageUrl: string) => void;
   onRetry: (job: ClientJob) => void;
   onCheckAgain: (job: ClientJob) => void;
@@ -20,6 +22,7 @@ interface ResultsGridProps {
 
 export function ResultsGrid({
   jobs,
+  videoPrice,
   onAnimate,
   onRetry,
   onCheckAgain,
@@ -46,6 +49,10 @@ export function ResultsGrid({
       {jobs.map((job) => {
         const recipe = getRecipe(job.recipe);
         const running = isActivePhase(job.phase);
+        /* parentLocalId ya se escribía y no lo leía nadie. Es justo lo que hace falta
+           para saber si esta foto ya tiene un vídeo en marcha. */
+        const child = jobs.find((j) => j.parentLocalId === job.localId);
+        const childDead = child ? !isActivePhase(child.phase) && !child.videoUrl : false;
         const failedish =
           job.phase === "failed" ||
           job.phase === "nsfw" ||
@@ -117,23 +124,41 @@ export function ResultsGrid({
               ))}
             </div>
 
-            {/* Etapa 2: animar una foto ya aprobada. Es más barato equivocarse en la
-                imagen que en el vídeo, así que primero se aprueba y luego se paga. */}
+            {/*
+              Etapa 2: animar una foto ya aprobada. Es más barato equivocarse en la
+              imagen que en el vídeo, así que primero se aprueba y luego se paga.
+
+              El botón se apaga en cuanto existe un vídeo hijo VIVO. Sin esto, en modo
+              vídeo la foto se encadenaba sola Y además seguía mostrando "Animate",
+              así que un clic compraba un segundo vídeo sin enseñar precio. También
+              mata el doble cobro de siempre en modo foto: dos clics eran dos cargos.
+            */}
             {!running && !failedish && !job.videoUrl && canAnimate && job.images.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {job.images.map((url, i) => (
-                  <Button
-                    key={url}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onAnimate(job, url)}
-                    className="border-hairline text-ink"
-                  >
-                    <Wand2 className="size-3.5" />
-                    Animate {job.images.length > 1 ? `#${i + 1}` : "this"}
-                  </Button>
-                ))}
-              </div>
+              child && !childDead ? (
+                <p className="text-meta text-ink-muted">
+                  {isActivePhase(child.phase) && child.phase !== "in_progress"
+                    ? "Video queued from this one…"
+                    : "Making the video from this one…"}
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {job.images.map((url, i) => (
+                    <Button
+                      key={url}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onAnimate(job, url)}
+                      className="border-hairline text-ink"
+                    >
+                      <Wand2 className="size-3.5" />
+                      {childDead ? "Try the video again" : `Animate ${job.images.length > 1 ? `#${i + 1}` : "this"}`}
+                    </Button>
+                  ))}
+                  {videoPrice ? (
+                    <span className="text-meta text-ink-faint tnum">{videoPrice}</span>
+                  ) : null}
+                </div>
+              )
             ) : null}
           </section>
         );
