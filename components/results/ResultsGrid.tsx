@@ -6,7 +6,7 @@ import { formatCredits, formatUsd } from "@/lib/format";
 import { describeChange } from "@/lib/provider/higgsfield/normalize";
 import { getRecipe } from "@/lib/recipes";
 import { isActivePhase, type ClientJob } from "@/lib/client/store";
-import { GenerationProgress } from "./GenerationProgress";
+import { GenerationProgress, JobStatusLine } from "./GenerationProgress";
 import { TerminalState } from "./TerminalState";
 import { ResultCard } from "./ResultCard";
 
@@ -83,7 +83,9 @@ export function ResultsGrid({
                   {job.input.prompt ? ` · ${job.input.prompt}` : ""}
                 </p>
               </div>
-              {job.estimate ? (
+              {running ? (
+                <JobStatusLine job={job} />
+              ) : job.estimate ? (
                 <span className="shrink-0 text-meta text-ink-faint tnum">
                   {formatCredits(job.estimate.credits)} · {formatUsd(job.estimate.usd)}
                 </span>

@@ -56,7 +56,7 @@ export const RECIPES: Record<RecipeId, Recipe> = {
     stillModelId: "popcorn-auto",
     videoModelId: "kling-2.5-turbo-pro-i2v",
     canAnimate: true,
-    counts: [1, 4],
+    counts: [1, 2, 4],
     aspectRatio: "9:16",
     promptRequired: true,
     promptPlaceholder: "Tokyo at night",

@@ -527,19 +527,26 @@ export function StudioShell() {
             </div>
 
             {recipe.counts.length > 1 && !wantsVideo ? (
-              <div className="flex items-center gap-2">
-                <span className="text-meta font-medium text-ink-muted">Outputs</span>
-                <div className="flex gap-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-meta font-medium text-ink-muted">
+                  How many photos
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label="How many photos to generate"
+                  className="flex gap-1 rounded-md bg-canvas p-0.5"
+                >
                   {recipe.counts.map((c) => (
                     <button
                       key={c}
                       type="button"
+                      role="radio"
+                      aria-checked={count === c}
                       onClick={() => setCount(c)}
-                      aria-pressed={count === c}
                       className={
                         count === c
-                          ? "rounded-md bg-panel-raised px-3 py-1 text-meta font-semibold text-ink"
-                          : "rounded-md px-3 py-1 text-meta text-ink-muted hover:text-ink"
+                          ? "min-w-9 rounded-[5px] bg-panel-raised px-3 py-1 text-meta font-semibold text-ink"
+                          : "min-w-9 rounded-[5px] px-3 py-1 text-meta text-ink-muted hover:text-ink"
                       }
                     >
                       {c}
