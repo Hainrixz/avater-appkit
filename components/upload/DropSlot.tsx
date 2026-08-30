@@ -189,7 +189,7 @@ export function DropSlot({ compact, label, hint, value, onChange, disabled }: Dr
         }}
         className={cn(
           "group relative w-full overflow-hidden rounded-[14px]",
-          compact ? "aspect-4/3" : "aspect-3/4",
+          compact ? "aspect-16/10" : "aspect-3/4",
           "border-[1.5px] border-dashed bg-panel",
           "flex flex-col items-center justify-center gap-1.5 text-center",
           "transition-[border-color,background-color,transform] duration-[140ms] ease-out",

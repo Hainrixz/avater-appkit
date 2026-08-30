@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Film, Image as ImageIcon, Loader2, LogOut, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Film, Image as ImageIcon, Loader2, LogOut, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -428,7 +428,7 @@ export function StudioShell() {
           {/* El raíl es pegajoso PERO con scroll propio: en una pantalla de portátil el
               panel es más alto que el viewport, y sin esto el botón Generate queda
               debajo del borde y no hay forma de alcanzarlo. */}
-          <div className="sticky top-[88px] flex max-h-[calc(100dvh-104px)] flex-col gap-5 overflow-y-auto overscroll-contain rounded-xl border border-hairline bg-panel p-5">
+          <div className="sticky top-[88px] flex max-h-[calc(100dvh-104px)] flex-col gap-4 overflow-y-auto overscroll-contain rounded-xl border border-hairline bg-panel p-5">
             {/*
               LO PRIMERO ES QUÉ QUIERES, NO QUÉ MODELO.
               El usuario probó la app y dijo "no puedo elegir si quiero imágenes o video,
@@ -526,85 +526,6 @@ export function StudioShell() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-meta font-medium text-ink-muted">Model</span>
-              <ModelSwitcher
-                models={stillModels}
-                availability={state.availability}
-                value={stillModelId}
-                probing={state.probing}
-                onChange={(id) =>
-                  setState((s) => ({
-                    stillModelByRecipe: { ...s.stillModelByRecipe, [s.recipe]: id },
-                  }))
-                }
-              />
-              {/* La relación de aspecto se decide AQUÍ: ningún modelo de vídeo
-                  verificado acepta aspect_ratio, lo hereda de la imagen de origen. */}
-              <p className="text-micro tracking-normal text-ink-faint">
-                {recipe.aspectRatio} · video inherits this from the still
-              </p>
-            </div>
-
-            {/* El segundo selector es el que de verdad importa: la etapa de imagen
-                suele tener un solo motor sensato, mientras que animar tiene una
-                docena. Cambiar aquí de Kling a Hailuo o a Wan no toca nada más del
-                flujo — el normalizador traduce el body y la app dice qué ajustó. */}
-            {recipe.canAnimate && videoModels.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <span className="text-meta font-medium text-ink-muted">
-                  Animate with
-                </span>
-                <ModelSwitcher
-                  label="Animate model"
-                  models={videoModels}
-                  availability={state.availability}
-                  value={videoModelId}
-                  probing={state.probing}
-                  onChange={(id) =>
-                    setState((s) => ({
-                      videoModelByRecipe: { ...s.videoModelByRecipe, [s.recipe]: id },
-                    }))
-                  }
-                />
-
-                {videoDurations.length > 0 ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-meta text-ink-muted">Clip</span>
-                    <div className="flex gap-1">
-                      {videoDurations.map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setPreferredDuration(d)}
-                          aria-pressed={effectiveDuration === d}
-                          className={
-                            effectiveDuration === d
-                              ? "rounded-md bg-panel-raised px-2.5 py-1 text-meta font-semibold text-ink"
-                              : "rounded-md px-2.5 py-1 text-meta text-ink-muted hover:text-ink"
-                          }
-                        >
-                          {d}s
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* La confesión. Coercionar en silencio es un bug desde el asiento
-                    del usuario: si pidió 5s tiene derecho a saber que salieron 6. */}
-                {videoWarnings.length > 0 ? (
-                  <p className="rounded-md border border-hairline bg-panel-raised/40 px-2.5 py-2 text-micro leading-relaxed tracking-normal text-ink-muted">
-                    {videoWarnings.map((w) => describeChange(videoModel?.label ?? "This model", w)).join(" ")}
-                  </p>
-                ) : null}
-
-                <p className="text-micro tracking-normal text-ink-faint">
-                  Used when you animate a still. Charged separately.
-                </p>
-              </div>
-            ) : null}
-
             {recipe.counts.length > 1 && !wantsVideo ? (
               <div className="flex items-center gap-2">
                 <span className="text-meta font-medium text-ink-muted">Outputs</span>
@@ -657,6 +578,115 @@ export function StudioShell() {
                 photo {formatUsd(estimate!.usd)} + video {formatUsd(liveVideoEstimate!.usd)}
               </p>
             ) : null}
+
+            {/*
+              LOS MODELOS VAN DEBAJO DEL BOTÓN Y PLEGADOS.
+              El usuario probó la app y dijo "sólo me muestra los modelos": los dos
+              selectores ocupaban la última banda visible y Generate quedaba fuera de
+              pantalla en un portátil. La línea de resumen deja el motor y el precio a
+              la vista de un vistazo; los controles sólo aparecen si se piden.
+
+              Y se nombra el MEDIO, no "Model" a secas. Son dos catálogos distintos:
+              los modelos de imagen no hacen vídeo y los de vídeo no hacen fotos.
+            */}
+            <details className="group rounded-lg border border-hairline bg-canvas/60">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-meta text-ink-muted [&::-webkit-details-marker]:hidden">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="text-ink-faint">Image</span>
+                  <span className="font-medium text-ink">{stillModel?.label ?? "\u2014"}</span>
+                  {estimate ? <span className="tnum">{formatUsd(estimate.usd)}</span> : null}
+                  {wantsVideo ? (
+                    <>
+                      <ChevronRight className="size-3 shrink-0 text-ink-faint" aria-hidden />
+                      <span className="text-ink-faint">Video</span>
+                      <span className="font-medium text-ink">{videoModel?.label ?? "\u2014"}</span>
+                      {liveVideoEstimate ? (
+                        <span className="tnum">{formatUsd(liveVideoEstimate.usd)}</span>
+                      ) : null}
+                    </>
+                  ) : null}
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-ink-faint transition-transform duration-200 ease-out group-open:rotate-180" />
+              </summary>
+
+              <div className="flex flex-col gap-4 border-t border-hairline px-3 py-3">
+                <div className="flex flex-col gap-2">
+                  <span className="text-meta font-medium text-ink-muted">
+                    {wantsVideo ? "1 \u00b7 Image model" : "Image model"}
+                    <span className="ml-1 font-normal text-ink-faint">
+                      {wantsVideo ? "\u2014 makes the frame that gets animated" : "\u2014 makes your photos"}
+                    </span>
+                  </span>
+                  <ModelSwitcher
+                    label="Image model"
+                    models={stillModels}
+                    availability={state.availability}
+                    value={stillModelId}
+                    probing={state.probing}
+                    onChange={(id) =>
+                      setState((s) => ({
+                        stillModelByRecipe: { ...s.stillModelByRecipe, [s.recipe]: id },
+                      }))
+                    }
+                  />
+                  <p className="text-micro tracking-normal text-ink-faint">
+                    {recipe.aspectRatio} \u00b7 video inherits this from the still
+                  </p>
+                </div>
+
+                {recipe.canAnimate && videoModels.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-meta font-medium text-ink-muted">
+                      {wantsVideo ? "2 \u00b7 Video model" : "Video model"}
+                      <span className="ml-1 font-normal text-ink-faint">
+                        {wantsVideo ? "\u2014 animates that frame" : "\u2014 only if you animate a photo later"}
+                      </span>
+                    </span>
+                    <ModelSwitcher
+                      label="Video model"
+                      models={videoModels}
+                      availability={state.availability}
+                      value={videoModelId}
+                      probing={state.probing}
+                      onChange={(id) =>
+                        setState((s) => ({
+                          videoModelByRecipe: { ...s.videoModelByRecipe, [s.recipe]: id },
+                        }))
+                      }
+                    />
+
+                    {videoDurations.length > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-meta text-ink-muted">Clip</span>
+                        <div className="flex gap-1">
+                          {videoDurations.map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setPreferredDuration(d)}
+                              aria-pressed={effectiveDuration === d}
+                              className={
+                                effectiveDuration === d
+                                  ? "rounded-md bg-panel-raised px-2.5 py-1 text-meta font-semibold text-ink"
+                                  : "rounded-md px-2.5 py-1 text-meta text-ink-muted hover:text-ink"
+                              }
+                            >
+                              {d}s
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {videoWarnings.length > 0 ? (
+                      <p className="rounded-md border border-hairline bg-panel-raised/40 px-2.5 py-2 text-micro leading-relaxed tracking-normal text-ink-muted">
+                        {videoWarnings.map((w) => describeChange(videoModel?.label ?? "This model", w)).join(" ")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </div>
         </div>
 
