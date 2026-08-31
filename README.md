@@ -4,7 +4,7 @@
 
 **Put yourself anywhere.** A local, open-source studio for the [Higgsfield API](https://docs.higgsfield.ai/docs) — drop a photo, get yourself in another city, in a jacket you don't own, or standing next to someone three time zones away.
 
-You bring your own API key. Nothing is hardcoded, nothing is stored, and it runs on your machine.
+You bring your own API key. Nothing is hardcoded, nothing is committed, and it runs on your machine — yours goes into an httpOnly cookie in your browser for 30 days, or into `.env.local` if you would rather not paste it on every fresh profile.
 
 ```bash
 git clone https://github.com/Hainrixz/avater-appkit
@@ -53,7 +53,7 @@ This is a starter kit, so the interesting bits are the ones that took measuremen
 - **It tells you what it changed.** Pick a 5-second clip, switch from Kling to Hailuo — which only does 6 and 10 — and the app snaps to 6 *and says so*: "Hailuo 2.3 doesn't do 5s clip length — using 6s." It also tells you that video takes its aspect ratio from the source still, because none of the verified video models accept an `aspect_ratio` field at all. Silent coercion is a bug from the user's seat.
 - **The model switcher genuinely switches.** The API's request bodies are not uniform: `duration` is an integer `5|10` on Kling, `6|10` on Hailuo, and a *string* `"4"|"6"|"8"` on Veo; some models take `aspect_ratio` and `resolution`, others have no such field. Each catalogue entry owns a `buildBody()` that snaps unsupported values to the nearest legal one and drops fields the model doesn't have — and the UI tells you what it changed ("Hailuo doesn't do 5s clips — using 6s") instead of coercing silently. `npm run check:models` is the contract test for that.
 - **Every generation shows its price first.** There is no balance endpoint, so an out-of-credits error is only discoverable at submit time. The free `/estimate` call is the only thing standing between you and a surprise.
-- **Failures are honest.** `nsfw` is a distinct terminal state that Higgsfield refunds automatically, so it renders in neutral grey and leads with "you weren't charged" — not a red error. Running out of concurrent slots arrives as a `400` (there is no `429` in this API), so it's detected by message and shown as "queued", not "invalid request".
+- **Failures are honest.** `nsfw` is a distinct terminal state that Higgsfield refunds automatically, so it renders in neutral grey behind a shield rather than a red error: the headline is "This one didn't pass the safety filter", and the line under it opens with the credits that went back. Running out of concurrent slots arrives as a `400` (there is no `429` in this API), so it is matched by message rather than status and gets its own `concurrency_limit` kind instead of being filed as an invalid request — but the card still ends as a failure, in Higgsfield's own words, and you retry it yourself. Nothing queues on your behalf: `USER_MESSAGES` in `lib/shared/errors.ts` has the friendlier copy for exactly this, and nothing imports it yet.
 - **Results expire in about 7 days.** Every result carries an expiry badge and a download button that routes through `/api/download` — a cross-origin `<a download>` is ignored by every browser and would just open a tab.
 
 ## Known limitations
