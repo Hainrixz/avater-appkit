@@ -48,8 +48,8 @@ That also means you can hand this repo to anyone. They bring their own key and s
 This is a starter kit, so the interesting bits are the ones that took measurement rather than typing:
 
 - **Model choice is not obvious, and the endpoint name will not tell you.** `soul/reference` reproduces the reference photo's *whole composition* — background included — so a portrait plus "Tokyo at night" returns the same portrait. Two prompt rewrites, with and without `enhance_prompt`, failed identically before that was clear. Teleport moved to `popcorn/auto`, which does compose a subject into a genuinely new scene. See **Known limitations** for where that still falls short.
-- **There is an undocumented identity API, and it is not in the OpenAPI.** `POST /v1/custom-references` trains a reusable "Soul ID" from photos of one person, which `soul/character` then generates from. None of it is in `openapi.json`; it is in Higgsfield's own JS SDK and it answers live on `api.higgsfield.ai` with the same auth header. `GET /v1/text2image/soul-styles` (106 styles) is where valid `style_id` values come from, and `GET /v1/motions` (121 presets) is where DoP motion ids come from — both of which this repo previously documented as undiscoverable. They are not.
-- **It probes what your key can actually run.** Model access is per-account: on the key this was built against, 11 of 15 catalogued models worked and the rest returned `model_not_found`, `model_blocked` or `model_disabled`. So the app asks `/estimate` for each model at startup — that endpoint is free — and shows real prices next to real availability. Models you can't run stay visible, greyed out, with the reason.
+- **There is an undocumented identity API, and it is not in the OpenAPI.** `POST /v1/custom-references` trains a reusable "Soul ID" from photos of one person, which `soul/character` then generates from. None of it is in `openapi.json`; it is in Higgsfield's own JS SDK and it answers live on `api.higgsfield.ai` with the same auth header. `GET /v1/text2image/soul-styles` (106 styles) is where valid `style_id` values come from, and `GET /v1/motions` (121 presets) is where DoP motion ids come from. Neither is wired up here yet: the two DoP entries in `lib/provider/higgsfield/models.ts` still omit `motions`, and the comment beside them still calls those ids undiscoverable. That comment is wrong, and unwiring it is open work.
+- **It probes what your key can actually run.** Model access is per-account: on the key this was built against, 11 of 15 catalogued models worked and the rest came back `404`, `423` or `503`, which the app files as `not_found`, `blocked` and `disabled`. So the app asks `/estimate` for each model at startup — that endpoint is free — and shows real prices next to real availability. Models you can't run stay visible, greyed out, with the reason.
 - **It tells you what it changed.** Pick a 5-second clip, switch from Kling to Hailuo — which only does 6 and 10 — and the app snaps to 6 *and says so*: "Hailuo 2.3 doesn't do 5s clip length — using 6s." It also tells you that video takes its aspect ratio from the source still, because none of the verified video models accept an `aspect_ratio` field at all. Silent coercion is a bug from the user's seat.
 - **The model switcher genuinely switches.** The API's request bodies are not uniform: `duration` is an integer `5|10` on Kling, `6|10` on Hailuo, and a *string* `"4"|"6"|"8"` on Veo; some models take `aspect_ratio` and `resolution`, others have no such field. Each catalogue entry owns a `buildBody()` that snaps unsupported values to the nearest legal one and drops fields the model doesn't have — and the UI tells you what it changed ("Hailuo doesn't do 5s clips — using 6s") instead of coercing silently. `npm run check:models` is the contract test for that.
 - **Every generation shows its price first.** There is no balance endpoint, so an out-of-credits error is only discoverable at submit time. The free `/estimate` call is the only thing standing between you and a surprise.
@@ -62,7 +62,7 @@ Written down because a starter kit that hides its gaps wastes your afternoon ins
 
 - **Likeness is not solved yet.** Teleport runs on `popcorn/auto`, whose own catalogue calls it `text2image` and which exposes **no identity parameter of any kind**. It composes a convincing scene; it does not reliably give you *your* face. The fix is identified and not yet built: train a Soul ID through `POST /v1/custom-references`, then generate with `soul/character` and its `custom_reference_id` / `custom_reference_strength`. Until that lands, treat Teleport as "someone who looks a bit like you, somewhere else".
 - **The demo images are a generated person, not a photograph of anyone.** They came from this app, but the face was synthesised first, so they do not demonstrate likeness preservation from a real selfie.
-- **`enhance_prompt` defaults to true** on the Soul endpoints, which means Higgsfield rewrites your wording server-side before generating. If a result ignores what you asked for, that is the first thing to suspect.
+- **`enhance_prompt` defaults to true** on `soul/reference` and on both DoP models — not on the Soul family as a whole: `soul/standard` never sends the field, and neither does `popcorn/auto`, which is what all three recipes actually run on. Where it is on, Higgsfield rewrites your wording server-side before generating, so a result that ignores what you asked for is worth suspecting it. Where it is off, look elsewhere.
 - **Veo 3.1 (reference), Veo 3.1, Sora 2 Pro and Seedance Pro Fast** are in the catalogue but were unavailable on the account this was built against — those four are the gap between the fifteen and the eleven above. They render greyed out with the reason and light up on their own if your plan includes them.
 - **No webhooks.** `hf_webhook` needs a publicly reachable HTTPS endpoint, which localhost is not. Polling is client-driven on the documented backoff.
 
@@ -73,7 +73,11 @@ Next.js 16 · React 19 · TypeScript · Tailwind v4 · shadcn/ui · zero API SDK
 ```
 app/api/*        route handlers — the key never leaves the server
 lib/provider/    the swappable seam: swap Higgsfield for another API here
-lib/client/      ~150-line store, a single-timer poller, and actions.ts (all the
+lib/server/      what the route handlers stand on: the key's cookie, the API
+                 guard, the URL allowlist, the availability cache, the upload
+                 sniffer, the semaphore and the idempotency map
+lib/shared/      the types and the error taxonomy both sides switch on
+lib/client/      a 320-line store, a single-timer poller, and actions.ts (all the
                  upload/estimate/submit logic, deliberately outside React)
 components/      hero, studio, upload, results
 tests/models.ts  the buildBody contract test
@@ -81,7 +85,7 @@ tests/models.ts  the buildBody contract test
 
 ### Swapping the API
 
-`lib/provider/provider.ts` defines a small `Provider` interface — upload, estimate, submit, poll, cancel, probe. `lib/provider/higgsfield/` implements it. To point this at a different generation API, write one more implementation and register it in `lib/provider/index.ts`. Everything above that seam — recipes, UI, polling, pricing display — is provider-agnostic.
+`lib/provider/provider.ts` defines a small `Provider` interface — `listModels`, `getModel`, `uploadImage`, `estimate`, `submit`, `poll`, `cancel`, `probe`, `verifyCredentials`, none of them optional. `lib/provider/higgsfield/` implements it. To point this at a different generation API, write one more implementation and register it in `lib/provider/index.ts`. Everything above that seam — recipes, UI, polling, pricing display — is provider-agnostic.
 
 ## Four things that will bite you
 
@@ -106,8 +110,8 @@ npm run banner        # re-shoot .github/banner.jpg from the running app
 
 ## Making it yours
 
-- **Colours and type** live in the `@theme` block at the top of `app/globals.css`. Everything reads from there; no component hardcodes a hex.
-- **Recipes** are data. `lib/recipes.ts` declares the slots, prompts and models — add a third photo slot and the dropzone follows without a component change.
+- **Colours and type** live in `app/globals.css`: the raw values in the `:root` block, the type scale and the Tailwind aliases in the `@theme inline` block above it. Change a value in `:root` and the app follows. Two things sit outside it — the literal `themeColor` in `app/layout.tsx`, because a meta tag cannot read a CSS variable, and the indigo sweep in `components/results/GenerationProgress.tsx`.
+- **Recipes** are data, up to a point. `lib/recipes.ts` declares the slots, prompts and models, so swapping a model or rewriting a prompt touches nothing else. A third photo slot does touch something: `components/upload/SlotDropzone.tsx` lays `slots[0]` and `slots[1]` out by hand, so a third never gets a dropzone, never gets filled, and the generate button never unlocks. Give it a real `slots.map()` first.
 - **Demo images** in `public/demo/` are real output from this app, not mockups. Swap them for your own and the hero and comparison slider update.
 - **More components**: this uses [21st.dev](https://21st.dev). With your own key in `.env.local`, `npx shadcn@latest add "https://21st.dev/r/<author>/<slug>?api_key=$API_KEY_21ST"`.
 

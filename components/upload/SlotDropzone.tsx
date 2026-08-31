@@ -12,8 +12,12 @@ interface SlotDropzoneProps {
 }
 
 /**
- * Un solo componente para todas las recetas: la aridad sale de `recipe.slots`, así
- * que añadir una receta de tres fotos no toca nada de aquí.
+ * Un solo componente para recetas de UNA o DOS ranuras. No es genérico: la rama
+ * de dos indexa `slots[0]` y `slots[1]` a mano dentro de una rejilla de tres
+ * columnas, así que una receta de tres fotos hay que pasarla por aquí antes de
+ * que sirva — la tercera no se dibuja, nunca se llena, y el botón de generar no
+ * se habilita, porque StudioShell exige `filled.length === recipe.slots.length`.
+ * Si hace falta, lo que toca es un `slots.map()` de verdad.
  *
  * Con dos ranuras aparece un "+" entre ellas. Ese signo es lo que hace legible en un
  * cuarto de segundo que la receta combina dos imágenes, sin una línea de copy.
