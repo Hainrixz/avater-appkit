@@ -63,7 +63,7 @@ Written down because a starter kit that hides its gaps wastes your afternoon ins
 - **Likeness is not solved yet.** Teleport runs on `popcorn/auto`, whose own catalogue calls it `text2image` and which exposes **no identity parameter of any kind**. It composes a convincing scene; it does not reliably give you *your* face. The fix is identified and not yet built: train a Soul ID through `POST /v1/custom-references`, then generate with `soul/character` and its `custom_reference_id` / `custom_reference_strength`. Until that lands, treat Teleport as "someone who looks a bit like you, somewhere else".
 - **The demo images are a generated person, not a photograph of anyone.** They came from this app, but the face was synthesised first, so they do not demonstrate likeness preservation from a real selfie.
 - **`enhance_prompt` defaults to true** on the Soul endpoints, which means Higgsfield rewrites your wording server-side before generating. If a result ignores what you asked for, that is the first thing to suspect.
-- **Veo 3.1, Sora 2, Seedance, Nano Banana and Flux** are in the catalogue but were unavailable on the account this was built against. They render greyed out with the reason and light up on their own if your plan includes them.
+- **Veo 3.1 (reference), Veo 3.1, Sora 2 Pro and Seedance Pro Fast** are in the catalogue but were unavailable on the account this was built against — those four are the gap between the fifteen and the eleven above. They render greyed out with the reason and light up on their own if your plan includes them.
 - **No webhooks.** `hf_webhook` needs a publicly reachable HTTPS endpoint, which localhost is not. Polling is client-driven on the documented backoff.
 
 ## Stack
