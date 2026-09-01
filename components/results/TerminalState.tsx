@@ -17,8 +17,8 @@ interface TerminalStateProps {
  *
  * `nsfw` es el caso que casi todo el mundo hace mal. NO es un fallo: la API lo trata
  * como estado propio y lo reembolsa automáticamente. Por eso aquí no hay ni un pixel
- * rojo, no hay triángulo de advertencia, y la PRIMERA frase es que no se cobró —
- * porque esa es la pregunta real del usuario. Un banner rojo haría cerrar la app a
+ * rojo, no hay triángulo de advertencia, y el reembolso abre el renglón que va justo
+ * debajo del titular — porque esa es la pregunta real del usuario. Un banner rojo haría cerrar la app a
  * alguien que no ha perdido nada.
  *
  * Y como el rosa ES la acción primaria de la app, los errores de verdad van en ámbar:

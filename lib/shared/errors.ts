@@ -134,8 +134,11 @@ export const HTTP_STATUS_FOR_KIND: Record<ErrorKind, number> = {
   ambiguous_submit: 502,
 };
 
-/** Copy orientado al usuario. El tono importa: `nsfw` e `insufficient_credits`
- *  tienen que decir "no se te cobró" primero, porque es la pregunta real. */
+/** Copy orientado al usuario. El tono importa: en `nsfw` e `insufficient_credits`
+ *  el dinero va lo primero del cuerpo, porque es la pregunta real.
+ *
+ *  PENDIENTE: nadie importa esta constante todavía. Mientras siga así, un límite de
+ *  concurrencia se pinta con el texto crudo de la API en vez de con esto. */
 export const USER_MESSAGES: Record<ErrorKind, string> = {
   unauthorized:
     "That API key isn't valid. Check the KEY_ID:KEY_SECRET format and paste it again.",

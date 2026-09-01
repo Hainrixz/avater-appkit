@@ -1,8 +1,10 @@
 import type { AspectRatio, RecipeId } from "@/lib/shared/types";
 
 /**
- * Las tres recetas. Fuente única de la aridad: el dropzone se dibuja mapeando
- * `slots`, así que añadir una receta de tres fotos no toca ningún componente.
+ * Las tres recetas. `slots` es la fuente única de la aridad, pero OJO: el dropzone
+ * todavía no la mapea. `SlotDropzone` indexa `slots[0]` y `slots[1]` a mano, así que
+ * una receta de tres fotos exige arreglar ese componente antes de servir de nada —
+ * la tercera no se dibuja, no se llena, y el botón de generar no se habilita.
  */
 
 export interface RecipeSlot {
