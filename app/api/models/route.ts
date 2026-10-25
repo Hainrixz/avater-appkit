@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Enrique Rocha (@soyenriquerocha)
+// SPDX-License-Identifier: MIT
+// id: er-6dbf4bf2
 import { listModels, toPublic } from "@/lib/provider/higgsfield/models";
 import { getCredentials, fingerprint } from "@/lib/server/credentials";
 import { peekAvailability } from "@/lib/server/availability";

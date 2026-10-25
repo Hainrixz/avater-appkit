@@ -45,5 +45,6 @@
     "url": "git+https://github.com/Hainrixz/avater-appkit.git"
   },
   "description": "A local Next.js studio for the Higgsfield API. Bring your own key.",
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Enrique Rocha (@soyenriquerocha) (https://www.tododeia.com)"
 }

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Enrique Rocha (@soyenriquerocha)
+// SPDX-License-Identifier: MIT
+// id: er-6dbf4bf2
 "use client"
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Enrique Rocha (@soyenriquerocha)
+// SPDX-License-Identifier: MIT
+// id: er-6dbf4bf2
 /**
  * Captura la portada del README a partir de la app REAL.
  *

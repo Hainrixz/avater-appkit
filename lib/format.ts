@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Enrique Rocha (@soyenriquerocha)
+// SPDX-License-Identifier: MIT
+// id: er-6dbf4bf2
 /** Formateo de créditos, dinero, caducidad y tiempo. */
 
 export function formatCredits(credits: number): string {

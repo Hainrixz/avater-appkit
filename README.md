@@ -121,3 +121,10 @@ npm run banner        # re-shoot .github/banner.jpg from the running app
 MIT — see [LICENSE](./LICENSE). The Satoshi and General Sans fonts in `app/fonts/` are under the ITF Free Font License; if you ship this commercially you inherit that, so keep [app/fonts/LICENSE.md](./app/fonts/LICENSE.md).
 
 Not affiliated with Higgsfield. Built with [Claude Code](https://claude.com/claude-code).
+
+<!-- marca-agua:inicio -->
+
+---
+
+<sub>Hecho por **Enrique Rocha (@soyenriquerocha)** · [tododeia.com](https://www.tododeia.com)⁠​‌‌​​‌​‌​‌‌‌​​‌​​​‌​‌‌​‌​​‌‌​‌‌​​‌‌​​‌​​​‌‌​​​‌​​‌‌​​‌‌​​​‌‌​‌​​​‌‌​​​‌​​‌‌​​‌‌​​​‌‌​​‌​⁠</sub>
+<!-- marca-agua:fin -->

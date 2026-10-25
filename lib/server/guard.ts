@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Enrique Rocha (@soyenriquerocha)
+// SPDX-License-Identifier: MIT
+// id: er-6dbf4bf2
 import { AppError, HTTP_STATUS_FOR_KIND } from "@/lib/shared/errors";
 import { getProvider, type Provider } from "@/lib/provider";
 import { fingerprint, getCredentials, redact } from "./credentials";
